@@ -1,6 +1,6 @@
 # MLPR_Project
 
-### __Machine learning model for Chronic wound status assessment using Flourescent Dressings__
+### __Machine learning assisted Chronic Wound status assessment using smart dressings__
 
 Chronic wounds, like diabetic foot ulcers (DFUs), are a significant global health burden, requiring continuous, non-invasive monitoring to prevent complications like infection and amputation. Conventional wound care involves manual dressing removal and exudate analysis, which is painful, time-consuming, raise amputation risks, impairing recovery. To address this challenge, we develop a machine learning (ML) model to support and complement the smart hydrogel wound dressing being created at the Centre for Equitable and Personalized Healthcare (CEPH), Plaksha University.
 
