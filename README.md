@@ -10,6 +10,4 @@ Then the images were passed through a ResNet-18 backbone for deep feature extrac
 
 This enables wound status assessment without specialized equipment, promoting accurate self-monitoring, reducing hospital visits, and supporting timely, cost-effective care at home or point-of-care settings.
 
-Keywords: Chronic Wounds, Diabetic Foot Ulcers (DFUs), Smart Hydrogel Dressings, Pyranine (HPTS), Silk Fibroin (SF) Hydrogels, Machine Learning, Image Analysis, pH Monitoring, Wound Healing, Random Forest Classifier, Image Segmentation, Non-invasive Monitoring, Point-of-Care Healthcare, Bandage Lifetime, Hydrogel Degradation.
-
 ![WOUND HEALING-3](https://github.com/user-attachments/assets/de49864a-026c-4d51-aa76-3a3fdcbb0d9a)
