@@ -36,7 +36,7 @@ Day 1..11  ->  0, 24, 30, 48, 72, 95, 120, 168, 192, 216, 264 hr
 **Split.** Stratified per pH by well: 10 test, 33 train, 5 val per class
 (`random_state=42`), written to `train.csv` / `val.csv` / `test.csv`. Because a
 row *is* a well, this split is inherently well-wise — the leakage discussed in
-`classical/README.md` cannot occur here.
+`supervised/README.md` cannot occur here.
 
 ## Notebooks
 
@@ -106,7 +106,7 @@ Three variants follow:
 | Variant | Idea |
 |---|---|
 | **Hybrid** | Conv 32/64, then averages two heads — a per-frame `TimeDistributed(Dense)` softmax taken at the last timepoint, and an `LSTM(128)` sequence softmax. Hedges between single-image and trajectory evidence. |
-| **Feature-enhanced** | Two branches — `LSTM(64)` over CNN features and `LSTM(32)` over the hand-crafted HSV histograms from `classical/` — concatenated into `Dense(64)` → `Dense(4)`. Fuses learned and engineered features. |
+| **Feature-enhanced** | Two branches — `LSTM(64)` over CNN features and `LSTM(32)` over the hand-crafted HSV histograms from `supervised/` — concatenated into `Dense(64)` → `Dense(4)`. Fuses learned and engineered features. |
 | **Last-day only** | Uses `Lambda(lambda x: x[:, -1])` to keep only the final frame. The ablation that tells you whether the sequence is earning its keep. |
 
 ## Caveats

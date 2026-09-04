@@ -27,7 +27,7 @@ tests it directly. If features cluster into four clean groups aligning with pH,
 the labels are recoverable from colour alone and high accuracy is expected. If
 they instead cluster by **timepoint** or by **Hydrolytic vs Enzymatic**, then
 degradation state dominates pH in the representation — which would explain why
-`classical/` appends elapsed hours as a feature, and would be a finding in its
+`supervised/` appends elapsed hours as a feature, and would be a finding in its
 own right.
 
 Two specific questions the supervised arms cannot answer:
@@ -44,7 +44,7 @@ Two specific questions the supervised arms cannot answer:
 ## Suggested contents
 
 Inputs are already available — either descriptor from `preprocessing/` (33-dim
-histograms + moments, or the 512-dim joint HSV histogram from `classical/`), or
+histograms + moments, or the 512-dim joint HSV histogram from `supervised/`), or
 the 512-dim ResNet18 embeddings from `transfer_learning/`. Comparing clustering
 on hand-crafted vs learned features is itself informative.
 

@@ -3,7 +3,7 @@
 Stage 1 of the pipeline. Turns raw well-plate photographs into clean, uniform,
 single-well crops and the split that every downstream model consumes.
 
-Everything in `classical/`, `unsupervised/`, `transfer_learning/` and `lstm/`
+Everything in `supervised/`, `unsupervised/`, `transfer_learning/` and `lstm/`
 assumes this stage has already run.
 
 ## Dataset
@@ -58,7 +58,7 @@ suppresses reflections on the darker late-timepoint images.
 
 ### `feature_extraction.ipynb` — descriptors and the train/val/test split
 
-**Part 1 — hand-crafted colour descriptors** (the input to `classical/`):
+**Part 1 — hand-crafted colour descriptors** (the input to `supervised/`):
 
 - *RGB histogram* — 256 bins per channel, sum-normalised.
 - *HSV histogram* — H in 180 bins, S and V in 256 bins, concatenated and
@@ -87,8 +87,8 @@ boundary.
 
 | Path | Produced by | Consumed by |
 |---|---|---|
-| `Preprocessed_Data/` | `data.ipynb` | `classical/` |
-| `Split_Data/{train,val,test}/` | `feature_extraction.ipynb` | `transfer_learning/`, `classical/` |
+| `Preprocessed_Data/` | `data.ipynb` | `supervised/` |
+| `Split_Data/{train,val,test}/` | `feature_extraction.ipynb` | `transfer_learning/`, `supervised/` |
 
 ## Running these notebooks
 

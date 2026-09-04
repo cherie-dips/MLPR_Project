@@ -1,8 +1,14 @@
-# Classical Models
+# Supervised
 
-Stage 2a. pH classification from **hand-crafted colour features** — no learned
-representation. This is the baseline arm: it establishes how much of the signal
-is plain colour statistics before any deep model is justified.
+Stage 2a. Classical supervised classifiers — KNN, SVM, Random Forest and
+friends — fitted on **hand-crafted colour features**, with no learned
+representation.
+
+This is the counterpart to `unsupervised/`, and the baseline arm of the project:
+it establishes how much of the signal is plain colour statistics before any deep
+model is justified. (`transfer_learning/` and `lstm/` are supervised too; what
+sets this folder apart is that the features are engineered by hand rather than
+learned by a network.)
 
 Pipeline position:
 
@@ -85,6 +91,11 @@ cropped well image
 
 ## Caveats
 
+- **There is no KNN, despite the filename.** `knn_svm_rf.ipynb` imports
+  `KNeighborsClassifier` twice but never instantiates or fits it. The notebook
+  trains SVM, Random Forest, XGBoost and MLP only. Either add the KNN run or
+  rename the notebook — as it stands the name promises a model that is not
+  there.
 - **The well-wise split is discarded here.** These cells walk `Split_Data/train`
   and `Split_Data/test`, pool every image, then re-split with
   `train_test_split(..., random_state=42)`. That re-split is image-level, so
