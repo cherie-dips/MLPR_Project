@@ -89,27 +89,121 @@ cropped well image
   -> pH in {5, 6, 7, 8}
 ```
 
-## Caveats
+## Audit and fixes
 
-- **There is no KNN, despite the filename.** `knn_svm_rf.ipynb` imports
-  `KNeighborsClassifier` twice but never instantiates or fits it. The notebook
-  trains SVM, Random Forest, XGBoost and MLP only. Either add the KNN run or
-  rename the notebook — as it stands the name promises a model that is not
-  there.
-- **The well-wise split is discarded here.** These cells walk `Split_Data/train`
-  and `Split_Data/test`, pool every image, then re-split with
-  `train_test_split(..., random_state=42)`. That re-split is image-level, so
-  photographs of the same physical well land on both sides — the leakage the
-  well-wise split in `preprocessing/` exists to prevent. Accuracies from this
-  notebook are optimistic and are **not** comparable with the well-wise numbers
-  from `transfer_learning/`. To fix, load `train`/`val`/`test` as given instead
-  of re-splitting.
-- `Split_Data/val` is never read — only `train` and `test` are walked.
-- The two notebooks use different descriptors (33-dim separate histograms vs
-  512-dim joint histogram); their numbers are not directly comparable either.
+`knn_svm_rf.ipynb` had three defects. All are fixed in `train_supervised.py`;
+the notebook is left as the original exploratory record.
 
-## Running these notebooks
+| # | Defect | Fix |
+|---|---|---|
+| 1 | Pooled `Split_Data/train` + `test` and re-split at the **image** level, so photographs of the same physical gel landed on both sides | Uses `preprocessing/splits.csv` (well-wise) as given, never re-splits |
+| 2 | Selected hyperparameters by cross-validating the leaky training pool | Selection on the held-out **val wells** via `PredefinedSplit`; test touched once |
+| 3 | Imported `KNeighborsClassifier` but **never fitted one** | KNN included and tuned |
+| 4 | `StandardScaler` on 512 histogram bins of which **241 are identically zero** — float32 overflow in the MLP matmul | `VarianceThreshold(1e-8)` before scaling; 169 live features remain |
+| 5 | `Split_Data/val` never read | val used for model selection |
 
-Paths are relative to the **repository root**. Start Jupyter there, or
-`os.chdir("..")` in the first cell. `Preprocessed_Data/` and `Split_Data/` are
-`.gitignore`d and must exist locally.
+XGBoost is not installed in this environment, so that variant is not reported.
+
+## Results
+
+Reproduce with:
+
+```bash
+python3 preprocessing/build_split.py
+python3 supervised/train_supervised.py     # ~30 s; writes supervised/results.json
+```
+
+Well-wise split, 1,177 train / 410 val / 376 test images (116/40/36 wells).
+Models are refit on **train only** so the train→val gap stays interpretable.
+
+| Model | train | val | **test** | macro-F1 | train−val |
+|---|---|---|---|---|---|
+| Baseline (majority class) | 0.258 | 0.254 | 0.253 | 0.101 | +0.005 |
+| KNN (k=9, manhattan, uniform) | 0.800 | 0.688 | 0.684 | 0.685 | +0.113 |
+| SVM (RBF, C=10) | 0.991 | 0.685 | 0.689 | 0.688 | +0.305 |
+| Random Forest (400 trees, depth 20, leaf 2) | 1.000 | 0.732 | 0.729 | 0.729 | +0.268 |
+| MLP (64,64; alpha 0.1) | 0.964 | 0.622 | 0.662 | 0.662 | +0.342 |
+| **Random Forest + elapsed time** | 1.000 | 0.763 | **0.769** | **0.769** | +0.237 |
+
+All four learners clear the 0.25 majority baseline by a wide margin, so colour
+histograms genuinely carry pH signal.
+
+### Fit diagnosis
+
+**Every model overfits**, and the grids were not able to regularise it away:
+
+- RF and SVM reach **1.000 / 0.991 training accuracy** against ~0.69–0.73
+  validation — a 27–31 point gap.
+- The RF grid searched `max_depth ∈ {None,10,20}`, `min_samples_leaf ∈ {1,2,4}`
+  and `max_features ∈ {sqrt,log2}`. The most-regularised settings did **not**
+  improve val, so this gap is not a tuning oversight — 1,177 samples in 169
+  effective dimensions is simply a thin regime.
+- KNN is the exception (gap +0.113) because `k=9` with uniform weights is
+  strongly smoothed. It pays about 4 points of test accuracy for that.
+- **Nothing underfits.** The majority baseline sits at 0.253 and every model is
+  far above it.
+- val ≈ test throughout (e.g. RF 0.732 / 0.729), so the held-out estimate is
+  stable and the val set was not overfitted by model selection.
+
+### Where the errors are
+
+Random Forest + time, test confusion (rows = true, cols = predicted):
+
+|  | pH5 | pH6 | pH7 | pH8 |
+|---|---|---|---|---|
+| **pH5** | **81** | 7 | 3 | 1 |
+| **pH6** | 17 | **67** | 8 | 3 |
+| **pH7** | 3 | 0 | **72** | 18 |
+| **pH8** | 1 | 1 | 25 | **69** |
+
+Errors are almost entirely between **adjacent pH values**: 43 of 86 errors are
+pH7↔pH8 and 24 are pH5↔pH6. Confusion across the acid/alkaline boundary is
+rare (5 images total from pH 5/6 predicted as 8, and 2 the other way).
+
+Clinically this is the forgiving failure mode — healthy skin is pH 4–6 and
+chronic wounds pH 7–8, so the model separates *healing from non-healing*
+far better than the 0.77 figure suggests, and mostly errs on the exact value
+within a band.
+
+### Why elapsed time helps (+0.040)
+
+Appending hours-since-application lifts test accuracy from 0.729 to 0.769. The
+`unsupervised/` analysis explains why: colour structure in this dataset tracks
+**degradation time roughly four times more strongly than it tracks pH**
+(ARI 0.31 vs 0.08). The same hue means different pH at 0 hr and 264 hr, so
+telling the model where on the degradation curve a sample sits removes a large
+confound. Hours-since-application is known at inference time in the intended
+point-of-care use, so this is a legitimate feature rather than leakage.
+
+## Final architecture of this arm
+
+```
+cropped well image
+  -> resize 128x128
+  -> BGR to HSV
+  -> joint 8x8x8 HSV histogram, L2-normalised   (512 dims)
+  -> VarianceThreshold                          (169 live dims)
+  -> [+ elapsed hours]                          (170 dims)
+  -> RandomForest(400 trees, max_depth 20, min_samples_leaf 2)
+  -> pH in {5, 6, 7, 8}
+```
+
+Test accuracy **0.769**, macro-F1 **0.769**.
+
+## Remaining caveats
+
+- The 7.1% of images that fail to crop (see `preprocessing/README.md`) are
+  absent here too, and they are concentrated at 0 hr and 216/264 hr. Reported
+  accuracy is therefore conditional on the crop succeeding.
+- `classical_Programming.ipynb` (rule-based) has not been re-scored on the
+  corrected split; its thresholds were hand-tuned against the full
+  `Preprocessed_Data` tree, so its accuracy is a training-set number and not
+  comparable to the table above.
+- The filename `knn_svm_rf.ipynb` still promises a KNN the notebook does not
+  contain; `train_supervised.py` is where the KNN actually lives.
+
+## Running
+
+Paths are relative to the **repository root**. `Preprocessed_Data/` is
+`.gitignore`d and must exist locally. Features are cached to
+`supervised/_features.npz` after the first run.

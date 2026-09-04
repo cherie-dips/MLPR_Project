@@ -1,10 +1,10 @@
 # Preprocessing
 
-Stage 1 of the pipeline. Turns raw well-plate photographs into clean, uniform,
-single-well crops and the split that every downstream model consumes.
+Stage 1. Turns raw well-plate photographs into clean single-well crops, and
+defines the train/val/test split every downstream model consumes.
 
 Everything in `supervised/`, `unsupervised/`, `transfer_learning/` and `lstm/`
-assumes this stage has already run.
+depends on this stage.
 
 ## Dataset
 
@@ -13,88 +13,161 @@ pH-sensitive fluorescent silk fibroin hydrogel dressings imaged in well plates.
 | Property | Value |
 |---|---|
 | Classes | pH 5, 6, 7, 8 |
-| Wells | 48 per pH (192 total) |
+| Wells | 48 per pH → **192 physical wells** |
 | Timepoints | 0, 24, 30, 48, 72, 95, 120, 168, 192, 216, 264 hr (11) |
-| Degradation condition | `Hydrolytic` / `Enzymatic` |
-| Images | 2,112 |
+| Degradation condition | `Hydrolytic` only |
+| Raw images | 2,112 = 11 × 4 × 48 (complete grid, verified) |
 
-On disk the raw tree is `New MLPR Data/<time> hr/pH<n> <condition>/<time>hr_pH<n>_W<well>.JPG`.
+`New MLPR Data/<time> hr/pH<n> Hydrolytic/<time>hr_pH<n>_W<well>.JPG`
 
-## Notebooks
+> **Correction.** Earlier drafts of these READMEs described an Enzymatic
+> condition alongside Hydrolytic. The current dataset has **no Enzymatic
+> images** — every class folder in `New MLPR Data/`, `Preprocessed_Data/` and
+> `Split_Data/` is `pH<n> Hydrolytic`. Enzymatic folders existed in an older
+> `MLPR_Dataset_Copy/` tree that was deleted from `main` before this work.
 
-### `data.ipynb` — well detection and circular crop
+**A well is not identified by its W-number.** W-numbers restart at 1 for each
+pH, so `W13` names four different physical gels. The physical well is the
+`(pH, well)` pair. This matters enormously for splitting — see below.
 
-Isolates the single hydrogel well from each photograph, so the model sees gel
-colour rather than plate background, labels or lighting.
+## `data.ipynb` — well detection and circular crop
 
-1. `cv2.imread` → `cv2.cvtColor(BGR2HSV)`.
-2. `cv2.inRange(hsv, lower_green, upper_green)` for a green mask.
-3. `cv2.GaussianBlur(mask, (5,5), 0)` to soften mask edges.
-4. Morphological `MORPH_CLOSE` then `MORPH_OPEN` with a 7×7 kernel — closes
-   pinholes inside the well, then removes speckle outside it.
-5. `cv2.findContours(..., RETR_EXTERNAL, CHAIN_APPROX_SIMPLE)`.
-6. Contour selection — discard `area < 5000`, then compute
+Isolates the hydrogel well from each photograph so the model sees gel colour,
+not plate background or labels.
+
+1. `cv2.imread` → `cvtColor(BGR2HSV)`.
+2. `cv2.inRange(hsv, lower_green, upper_green)` → green mask.
+3. `GaussianBlur(mask, (5,5), 0)`.
+4. Morphological `MORPH_CLOSE` then `MORPH_OPEN`, 7×7 kernel — closes pinholes
+   inside the well, then removes speckle outside it.
+5. `findContours(..., RETR_EXTERNAL, CHAIN_APPROX_SIMPLE)`.
+6. Discard `area < 5000`, then keep the contour with `radius > 30` and
+   `circularity > 0.6`, where
 
    ```
    (x, y), radius = cv2.minEnclosingCircle(cnt)
    circularity    = 4 * pi * area / (arcLength^2 + 1e-5)
    ```
 
-   and keep the contour with `radius > 30` and `circularity > 0.6`. Most cells
-   take the **largest** such contour; the later cells take the **left-most**,
-   for plates where a second well intrudes into the frame.
-7. Build a filled circle mask at `(x, y, r)`, `cv2.bitwise_and` it with the
-   image, and crop the bounding box `[y-r:y+r, x-r:x+r]`.
-8. Write to `Preprocessed_Data/<time> hr/pH<n> <condition>/cropped_<original>.JPG`.
+   Most cells take the largest such contour; later cells take the left-most,
+   for plates where a neighbouring well intrudes into the frame.
+7. Filled circle mask at `(x, y, r)`, `bitwise_and`, crop to the bounding box.
+8. Write `Preprocessed_Data/.../cropped_<original>.JPG`.
 
-**On the HSV thresholds.** The notebook holds several cells with different
-`lower_green`/`upper_green` bounds — `[20,20,100]–[70,255,255]`,
-`[55,30,40]–[75,110,120]`, `[65,100,50]–[85,255,255]`, `[35,90,80]–[75,255,255]`
-and others. These are not redundant. Gel colour shifts with both pH and
-degradation time, so a single global threshold loses wells at the extremes; the
-bounds were re-tuned per pH band and per timepoint and the folder re-run. The
-later cells also raise the blur to `(21,21)` and the kernel to 15×15, which
-suppresses reflections on the darker late-timepoint images.
+The several `lower_green`/`upper_green` variants in the notebook are not
+redundant: gel colour shifts with both pH and degradation time, so the bounds
+were re-tuned per pH band and timepoint. Later cells also raise the blur to
+`(21,21)` and the kernel to 15×15 to suppress reflections on dark late images.
 
-### `feature_extraction.ipynb` — descriptors and the train/val/test split
+### Measured coverage — 7.1% of images are silently dropped
 
-**Part 1 — hand-crafted colour descriptors** (the input to `supervised/`):
+| | |
+|---|---|
+| Raw images | 2,112 |
+| Successfully cropped | **1,963** |
+| **Failed to crop** | **149 (7.1%)** |
 
-- *RGB histogram* — 256 bins per channel, sum-normalised.
-- *HSV histogram* — H in 180 bins, S and V in 256 bins, concatenated and
-  sum-normalised.
-- *Colour moments* — per-channel mean, standard deviation and skewness (9 values).
-- *Compact vector* — the form the classifiers actually use: 8-bin H, S and V
-  histograms (24) concatenated with the 9 colour moments, on a 64×64 resize.
-  **33 dimensions.**
+The loss is **not random** — it is concentrated where the green mask fits worst:
 
-The rationale is that pH is encoded almost entirely in hue and brightness of the
-gel, so a colour histogram carries most of the usable signal at a tiny fraction
-of the dimensionality of the raw pixels.
+| Timepoint | 0 hr | 24 | 30 | 48 | 95 | 120 | 168 | 192 | 216 | 264 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Failures | **68** | 4 | 1 | 2 | 6 | 6 | 4 | 11 | **24** | **23** |
 
-**Part 2 — well-wise split** (`random.seed(42)`):
+| pH | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|
+| Failures | 36 | 25 | **57** | 31 |
 
-Well IDs are parsed from the filename, shuffled, and divided **60/20/20 by well**,
-then images are copied into `Split_Data/{train,val,test}/<time> hr/pH<n> <condition>/`.
+68 of 192 images at 0 hr (35%) are lost, plus 47 across 216/264 hr. At 0 hr the
+gel is palest and at late timepoints darkest, so a fixed HSV green range misses
+both extremes. pH 7 loses the most (57).
 
-The split is on the *well*, not the image. Because each well is photographed at
-all 11 timepoints, an image-level split would put 10 photographs of the same
-physical gel in train and the 11th in test — near-duplicate leakage that inflates
-accuracy. Splitting by well keeps every image of a gel on one side of the
-boundary.
+This biases every downstream model: the training set under-represents exactly
+the fresh and heavily-degraded states. A per-image adaptive threshold (Otsu on
+the saturation channel, or a Hough circle on the well rim, which does not depend
+on gel colour at all) would recover most of them. **The failures are silent** —
+no exception is raised, the image simply never appears in `Preprocessed_Data/`.
+
+## `feature_extraction.ipynb` — descriptors
+
+- *RGB histogram* — 256 bins/channel, sum-normalised.
+- *HSV histogram* — H 180 bins, S and V 256 bins, concatenated, normalised.
+- *Colour moments* — per-channel mean, std, skewness (9 values).
+- *Compact vector* — 8-bin H/S/V histograms (24) + 9 moments = **33 dims** at 64×64.
+
+pH is encoded almost entirely in gel hue and brightness, so colour histograms
+carry most of the usable signal at a fraction of raw-pixel dimensionality.
+
+## The split — this notebook's version is broken
+
+`feature_extraction.ipynb` parses `well_id = filename.split("_")[-1].split(".")[0]`
+→ `"W13"`, and splits those IDs 60/20/20. Two defects:
+
+1. **The W-number is not a well.** It ignores pH, so it treats four different
+   physical gels as one unit.
+2. **The `Split_Data/` tree on disk was not produced by that cell anyway.**
+   Measured directly:
+
+   | | train | val | test |
+   |---|---|---|---|
+   | images | 1,155 | 370 | 438 |
+   | distinct `(pH, well)` | **192** | 170 | 175 |
+
+   All 192 physical wells appear in train; 170 of them also appear in val and
+   175 in test. It is effectively a **per-image random split**. Since each well
+   is photographed at 11 timepoints, ten photographs of a gel sit in train while
+   the eleventh is scored as "unseen" test data.
+
+Every accuracy previously reported from `Split_Data/` is measured under this
+leakage.
+
+## `build_split.py` — the corrected split
+
+Groups by the physical `(pH, well)` pair — 192 groups — and splits those,
+stratified by pH. Emits a manifest CSV rather than copying ~2 GB of images
+again, so the split is reproducible and costs no disk.
+
+```bash
+python3 preprocessing/build_split.py     # writes preprocessing/splits.csv
+```
+
+| | train | val | test |
+|---|---|---|---|
+| **wells** | 116 | 40 | 36 |
+| images | 1,177 | 410 | 376 |
+| pH 5 / 6 / 7 / 8 | 294/304/281/298 | 106/104/97/103 | 92/95/93/96 |
+
+```
+well overlap train&val: 0    train&test: 0    val&test: 0
+```
+
+The script **asserts** disjointness, so the failure that produced the old tree
+cannot recur silently.
+
+### What the leakage was worth
+
+Identical features, identical model — only the split protocol differs:
+
+| Protocol | RF test accuracy |
+|---|---|
+| Image-level random split (old) | 0.751 |
+| Well-level split (corrected) | **0.729** |
+| Inflation | **+0.022** |
+
+On hand-crafted colour histograms the inflation is modest — histograms of a
+64×64 colour distribution simply do not carry enough well-specific detail to
+memorise. See `transfer_learning/README.md` for the same measurement on learned
+embeddings, where a network *can* memorise individual wells.
 
 ## Output contract
 
 | Path | Produced by | Consumed by |
 |---|---|---|
-| `Preprocessed_Data/` | `data.ipynb` | `supervised/` |
-| `Split_Data/{train,val,test}/` | `feature_extraction.ipynb` | `transfer_learning/`, `supervised/` |
+| `Preprocessed_Data/` | `data.ipynb` | all model folders |
+| `preprocessing/splits.csv` | `build_split.py` | all model folders |
+| `Split_Data/` | *(legacy, leaky)* | **do not use** |
 
-## Running these notebooks
+## Running
 
-Paths inside are relative to the **repository root** (`New MLPR Data`,
-`Preprocessed_Data`, `Split_Data`), not to this folder. Start Jupyter from the
-repo root, or add `os.chdir("..")` in the first cell.
-
-The image directories are `.gitignore`d — they are not in the repository and
-must be present locally.
+`build_split.py` runs from the repo root. The notebooks' paths are also relative
+to the repo root, so start Jupyter there or `os.chdir("..")` in the first cell.
+The image directories are `.gitignore`d and must be present locally.

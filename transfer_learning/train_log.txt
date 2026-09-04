@@ -1,0 +1,32 @@
+device=mps  train=1177 val=410 test=376
+  ep01 loss 1.139 train 0.482 val 0.537 *best
+  ep02 loss 0.861 train 0.655 val 0.539 *best
+  ep03 loss 0.742 train 0.739 val 0.646 *best
+  ep04 loss 0.651 train 0.779 val 0.666 *best
+  ep05 loss 0.581 train 0.811 val 0.646
+  ep06 loss 0.522 train 0.852 val 0.627
+  ep07 loss 0.499 train 0.869 val 0.634
+  ep08 loss 0.454 train 0.892 val 0.659
+  ep09 loss 0.413 train 0.920 val 0.607
+  ep10 loss 0.388 train 0.938 val 0.698 *best
+  ep11 loss 0.376 train 0.939 val 0.661
+  ep12 loss 0.373 train 0.941 val 0.695
+  ep13 loss 0.328 train 0.958 val 0.632
+  ep14 loss 0.318 train 0.970 val 0.673
+  ep15 loss 0.310 train 0.972 val 0.646
+  ep16 loss 0.304 train 0.972 val 0.646
+  ep17 loss 0.297 train 0.977 val 0.659
+  ep18 loss 0.287 train 0.984 val 0.649
+  early stop (no val gain in 8 epochs)
+training 979s; best val 0.698 @ epoch 10
+
+==============================================================================
+model                          train     val    test  macroF1    AUC
+------------------------------------------------------------------------------
+ResNet18 (fine-tuned)          0.975   0.698   0.614    0.615  0.866
+ResNet18 + RandomForest        1.000   0.690   0.662    0.660  0.879
+
+LEAKAGE CHECK (frozen embeddings + RF)
+  image-level split 0.712 | well-level 0.593 | inflation +0.119
+
+wrote transfer_learning/results.json
