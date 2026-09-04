@@ -8,7 +8,7 @@ Pipeline position:
 
 ```
 raw images
-  -> preprocessing/data.ipynb          (well detection, circular crop)
+  -> preprocessing/crop_wells.py          (well detection, circular crop)
   -> preprocessing/feature_extraction  (well-wise 60/20/20 split)
   -> THIS FOLDER                       (ResNet18 / VGG16 -> classifier head)
 ```
@@ -18,73 +18,25 @@ convolutional network from scratch. A frozen or lightly fine-tuned ImageNet
 backbone gives well-conditioned generic filters (edges, texture, colour blobs)
 and leaves only a small head to fit.
 
-## Notebooks
+## Scripts
 
-### `model_analysis.ipynb` — ResNet18, cell by cell
+| Script | Purpose |
+|---|---|
+| `train_transfer.py` | Fine-tunes ResNet18 on the well-wise split, then fits a Random Forest on its embeddings |
+| `layer_probe.py` | Accuracy of each ResNet18 stage — the core diagnosis |
+| `diagnose.py` | Feature ablation and linear probes |
+| `improve.py` | Grouped CV across feature sets |
+| `best_pipeline.py` | The corrected pipeline, with per-well aggregation |
 
-The reference walkthrough of the fine-tuning setup, split into one step per cell
-and ending in a `torchsummary` dump of the architecture. Read this one first.
-
-### `transfer_learning.ipynb` — the main experiment
-
-**Data loading.** `Split_Data/<split>/` holds one subdirectory per timepoint, and
-each of those holds the `pH<n> <condition>` class folders. The notebook builds an
-`ImageFolder` per timepoint and joins them with `ConcatDataset`, so a single
-loader spans all 11 timepoints while the class folders still supply the labels.
-
-**Transforms.** `Resize((224,224))` → `ToTensor()` → `Normalize([0.485,0.456,0.406],
-[0.229,0.224,0.225])` (ImageNet statistics, required for a pretrained backbone).
-
-**Model A — fine-tuned ResNet18.**
-
-```python
-model = models.resnet18(pretrained=True)
-model.fc = nn.Linear(model.fc.in_features, 4)   # 512 -> 4
-```
-
-`CrossEntropyLoss`, `Adam(lr=1e-3)`, batch 32, 15 epochs, all layers trainable.
-Saved to `resnet18_ph_classifier.pth`. Evaluated with a classification report and
-a confusion matrix over `["pH5","pH6","pH7","pH8"]`, then one-vs-rest ROC curves
-with per-class, micro- and macro-averaged AUC.
-
-**Model B — ResNet18 features + Random Forest** — *the final model*.
-
-The fine-tuned network is reloaded, its classifier is replaced with
-`nn.Identity()` so a forward pass emits the 512-dim penultimate embedding, and a
-`RandomForestClassifier(n_estimators=100)` is fitted on those embeddings.
-
-```python
-feature_extractor = models.resnet18(pretrained=True)
-feature_extractor.fc = nn.Linear(feature_extractor.fc.in_features, 4)
-feature_extractor.load_state_dict(model.state_dict())   # trained weights
-feature_extractor.fc = nn.Identity()                    # 512-dim embedding
-```
-
-Note the ordering: `fc` is first shaped like the trained model so
-`load_state_dict` matches, and only then swapped for `Identity`.
-
-Swapping softmax for a forest helps at this sample size — the forest is far less
-prone to overfitting 512 features on ~2k examples than a jointly-trained linear
-head, and its bagged trees handle the uneven class separability (pH 5 vs 6 is a
-much subtler colour shift than 6 vs 8).
-
-### `random_forest_cnn.ipynb` — VGG16 features + Random Forest
-
-The same idea with a Keras/TensorFlow backbone, as a cross-check that the result
-is not specific to ResNet:
-
-```python
-base = VGG16(weights='imagenet', include_top=False, input_shape=(128,128,3))
-x    = GlobalAveragePooling2D()(base.output)     # 512-dim
-```
-
-All convolutional layers frozen (no fine-tuning at all), images scaled to
-`[0,1]`, stratified 80/20 split, then `RandomForestClassifier(n_estimators=100)`.
+Three notebooks were removed: `transfer_learning.ipynb` (the main experiment),
+`model_analysis.ipynb` (a cell-by-cell duplicate of its ResNet18 section) and
+`random_forest_cnn.ipynb` (VGG16 + RF, never reproducible here — TensorFlow is
+not installed). Their defects are recorded below.
 
 ## Audit and fixes
 
-`transfer_learning.ipynb` had four defects. All are fixed in
-`train_transfer.py`; the notebooks are kept as the original record.
+The original `transfer_learning.ipynb` (removed) had four defects, all fixed
+in `train_transfer.py`:
 
 | # | Defect | Fix |
 |---|---|---|
@@ -98,8 +50,10 @@ mild brightness/contrast jitter of 0.10. Hue and saturation are left alone —
 they *are* the pH signal, and the original `ColorJitter(0.2, 0.2)` in `lstm/`
 was corrupting exactly the cue being measured.
 
-`random_forest_cnn.ipynb` (VGG16) cannot be re-run: TensorFlow is not installed
-in this environment. Its result is therefore not reported below.
+The VGG16 variant (`random_forest_cnn.ipynb`, removed) was never re-run —
+TensorFlow is not installed here — so it is not reported below. The layer probe
+makes it unlikely to have helped: it also read from the deepest, most
+colour-invariant layer.
 
 ## Results
 
@@ -354,7 +308,7 @@ python3 transfer_learning/best_pipeline.py  # corrected pipeline + per-well
 - 36 test wells / 376 test images. Because images within a well are strongly
   correlated, the effective sample size is closer to 36 than 376, so the
   interval above is optimistic.
-- `random_forest_cnn.ipynb` (VGG16 + RF) is unverified — TensorFlow is absent.
+- The VGG16 variant was never verified — TensorFlow is absent here.
 - `ImageFolder` label ordering in the old notebooks depended on every timepoint
   folder holding the same class folders in the same order; the manifest removes
   that fragility.

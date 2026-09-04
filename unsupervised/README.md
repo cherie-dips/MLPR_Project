@@ -12,7 +12,7 @@ elsewhere in the project.
 
 ```
 raw images
-  -> preprocessing/data.ipynb      (well detection, circular crop)
+  -> preprocessing/crop_wells.py      (well detection, circular crop)
   -> preprocessing/build_split.py  (well-wise manifest)
   -> THIS FOLDER                   (PCA / k-means / GMM / DBSCAN, labels held out)
 ```

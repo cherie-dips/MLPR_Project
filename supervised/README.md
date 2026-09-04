@@ -14,14 +14,14 @@ Pipeline position:
 
 ```
 raw images
-  -> preprocessing/data.ipynb          (well detection, circular crop)
-  -> preprocessing/feature_extraction  (colour descriptors + well-wise split)
+  -> preprocessing/crop_wells.py          (well detection, circular crop)
+  -> preprocessing/build_split.py     (well-wise split manifest)
   -> THIS FOLDER                       (rule-based -> SVM / RF / MLP)
 ```
 
 ## Notebooks
 
-### `classical_Programming.ipynb` — rule-based classifiers (no training)
+### `rule_based.py` — rule-based classifiers (no training)
 
 Two hand-written classifiers, included as the floor that any learned model must
 beat.
@@ -41,13 +41,28 @@ The prediction is `argmax` over the four counts. Darker green reads as more
 alkaline, lighter green as more acidic.
 
 **2. Feature-threshold classifier.** Reuses the 33-dim descriptor from
-`preprocessing/feature_extraction.ipynb` and thresholds a single value, the mean
+the colour descriptors and thresholds a single value, the mean
 green channel: `< 60 -> pH 5`, `< 75 -> 6`, `< 90 -> 7`, else `8`.
 
-Both are scored over all of `Preprocessed_Data` with a confusion matrix and
-`accuracy_score`.
+Both are now scored on the corrected data (`python3 supervised/rule_based.py`),
+and **both fail**:
 
-### `knn_svm_rf.ipynb` — trained classifiers
+| Rule | 4-way accuracy | acid vs alkaline |
+|---|---|---|
+| Green-shade pixel voting | **0.156** | 0.302 |
+| Mean-green threshold | **0.253** | 0.493 |
+| *(majority-class baseline)* | *0.256* | *0.507* |
+
+Pixel voting scores **below chance**. The mean-green threshold matches the
+baseline only by collapsing — it predicts pH 8 for 1,933 of 1,963 images,
+because thresholds tuned on raw photographs do not transfer to the darker
+circular crops.
+
+This is a useful floor: hand-written colour rules carry essentially no pH
+signal here, so the learned models' 0.755 is not a marginal gain over
+common sense.
+
+### `train_supervised.py` — trained classifiers
 
 **Features.** A different, larger descriptor than the one above — a *joint* 3D
 HSV histogram rather than three separate 1D ones:
@@ -79,8 +94,8 @@ hours lets it condition on where in the degradation curve the sample sits.
 
 ## Audit and fixes
 
-`knn_svm_rf.ipynb` had five defects. All are fixed in `train_supervised.py`;
-the notebooks are kept as the original exploratory record.
+The original `knn_svm_rf.ipynb` (removed) had five defects, all fixed in
+`train_supervised.py`:
 
 | # | Defect | Fix |
 |---|---|---|
@@ -207,11 +222,9 @@ cropped well image
 - The 7.1% of images that fail to crop (`preprocessing/README.md`) are absent
   here too, concentrated at 0 hr and 216/264 hr. Accuracy is conditional on the
   crop succeeding.
-- `classical_Programming.ipynb` (rule-based) has not been re-scored on the
-  corrected split; its thresholds were hand-tuned on the full tree, so its
-  accuracy is a training-set number.
-- The filename `knn_svm_rf.ipynb` still promises a KNN the notebook lacks;
-  `train_supervised.py` is where the KNN actually lives.
+- The rule-based thresholds were hand-tuned by eye on this same data, so the
+  numbers in the table above are training-set numbers and are, if anything,
+  optimistic — which makes their sub-baseline scores worse, not better.
 
 ## Running
 

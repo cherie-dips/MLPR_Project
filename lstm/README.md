@@ -8,7 +8,7 @@ Pipeline position:
 
 ```
 raw images
-  -> preprocessing/data.ipynb   (well detection, circular crop)
+  -> preprocessing/crop_wells.py   (well detection, circular crop)
   -> hydrogel_dataset.csv       (well -> 11 filenames, built here)
   -> THIS FOLDER                (CNN encoder per frame -> LSTM -> pH)
 ```
@@ -19,7 +19,9 @@ more discriminative than any one frame, and that is a sequence problem.
 
 ## The sequence index — `hydrogel_dataset.csv`
 
-Built by the first cells of `lstm_model.ipynb`. One row per well, 192 rows:
+Written by the original `lstm_model.ipynb` (removed). One row per well, 192 rows.
+The training scripts no longer read it — they build sequences from
+`preprocessing/splits.csv` — but it is kept as the dataset's sequence index:
 
 | Well | pH | Day 1 | Day 2 | ... | Day 11 |
 |---|---|---|---|---|---|
@@ -31,88 +33,54 @@ The `Day N` columns are labels only — the real elapsed times are unevenly spac
 Day 1..11  ->  0, 24, 30, 48, 72, 95, 120, 168, 192, 216, 264 hr
 ```
 
-`second_LSTM.ipynb` carries this as the `day_to_hour` dict.
+The removed Keras notebook carried this as its `day_to_hour` dict.
 
-**Split.** Stratified per pH by well: 10 test, 33 train, 5 val per class
-(`random_state=42`), written to `train.csv` / `val.csv` / `test.csv`. Because a
-row *is* a well, this split is inherently well-wise — the leakage discussed in
-`supervised/README.md` cannot occur here.
+**Split.** The removed notebook wrote its own per-pH split (10 test / 33 train /
+5 val per class) to three CSVs. Those are gone; the scripts now use
+`preprocessing/splits.csv` like every other arm, so all five folders share one
+split. Either way, a row here *is* a well, so this arm is inherently well-wise —
+the leakage discussed in `supervised/README.md` cannot occur.
 
-## Notebooks
+## Scripts
 
-### `lstm_model.ipynb` — ResNet18 encoder + PyTorch LSTM
+| Script | Purpose |
+|---|---|
+| `train_lstm.py` | Encodes each well's frames once with a frozen ResNet18, trains the LSTM head, runs the ablations |
+| `cv_lstm.py` | The same model under grouped 5-fold CV over all 192 wells |
 
-**Transforms.** `ToPILImage` → `Resize((224,224))` → `RandomHorizontalFlip` →
-`ColorJitter(brightness=0.2, contrast=0.2)` → `ToTensor`.
+Two notebooks were removed: `lstm_model.ipynb` (ported to `train_lstm.py`) and
+`second_LSTM.ipynb` (a Keras CNN-LSTM with three variants — a hybrid averaging
+per-frame and sequence heads, a two-branch model fusing CNN features with HSV
+histograms, and a last-day-only baseline). The Keras work was never reproducible
+here since TensorFlow is not installed; its ablation idea survives as the
+last-timepoint baseline in `train_lstm.py`. Their defects are recorded below.
 
-`ColorJitter` on a task whose entire signal is colour is a deliberate trade —
-it guards against the model latching onto absolute illumination of a particular
-photo session, at the cost of perturbing the very cue being measured. Worth an
-ablation.
+### Architecture
 
-Each well becomes a `(11, 3, 224, 224)` tensor; rows that do not yield exactly 11
-frames are dropped. Labels are `pH - 5`, giving classes 0–3.
+**Transforms.** `Resize((224,224))` → `ToTensor` → ImageNet `Normalize`. No
+colour jitter: the original applied `ColorJitter(0.2, 0.2)` to a task whose
+entire signal is colour.
 
-**Architecture.**
+Each well becomes an ordered `(L, 3, 224, 224)` tensor, `L` in 6..11. Labels are
+`pH - 5`, giving classes 0-3.
 
 ```python
-resnet = models.resnet18(pretrained=True)
-resnet.fc = nn.Identity()          # frozen encoder, 512-dim per frame
-resnet.eval()
+resnet = models.resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
+resnet.fc = nn.Identity()          # frozen encoder, 512-d per frame
 
-cnn_lstm = nn.Sequential(
-    nn.LSTM(input_size=512, hidden_size=256, num_layers=1, batch_first=True),
-    nn.Linear(256, 4),
-)
+self.lstm = nn.LSTM(512, 256, batch_first=True)
+self.fc   = nn.Linear(256, 4)
 ```
 
-Forward pass — each of the 11 frames is encoded independently under
-`torch.no_grad()`, the per-frame vectors are stacked to `(B, 11, 512)`, the LSTM
-runs over the time axis, and **only the final timestep's hidden state**
-`outputs[:, -1, :]` is fed to the classifier:
-
-```
-(B, 11, 3, 224, 224)
-  -> ResNet18 per frame, frozen   -> (B, 11, 512)
-  -> LSTM(512 -> 256)             -> (B, 11, 256)
-  -> take last timestep           -> (B, 256)
-  -> Linear(256 -> 4)             -> pH
-```
-
-`CrossEntropyLoss`, `Adam(lr=1e-4)` on the LSTM and head only, batch 4, 20
-epochs. The encoder is frozen throughout, so gradients touch ~800k parameters
-rather than 11M — the only tractable option with 132 training sequences.
-
-### `second_LSTM.ipynb` — Keras CNN-LSTM, trained end to end
-
-A TensorFlow counterpart with a small CNN learned from scratch instead of a
-pretrained encoder. Input `(11, 128, 128, 3)`, fed by an `ImageSequenceGenerator`
-(a `keras.utils.Sequence` that assembles one well's 11 frames per sample and
-substitutes a zero image for any missing frame).
-
-**Baseline.**
-
-```
-TimeDistributed(Conv2D(16,3x3,relu)) -> TimeDistributed(MaxPool2D)
-TimeDistributed(Conv2D(32,3x3,relu)) -> TimeDistributed(MaxPool2D)
-TimeDistributed(Flatten) -> LSTM(64) -> Dense(4, softmax)
-```
-
-`TimeDistributed` applies one shared CNN to every frame, so the convolutional
-weights are learned once and reused across the 11 timesteps.
-
-Three variants follow:
-
-| Variant | Idea |
-|---|---|
-| **Hybrid** | Conv 32/64, then averages two heads — a per-frame `TimeDistributed(Dense)` softmax taken at the last timepoint, and an `LSTM(128)` sequence softmax. Hedges between single-image and trajectory evidence. |
-| **Feature-enhanced** | Two branches — `LSTM(64)` over CNN features and `LSTM(32)` over the hand-crafted HSV histograms from `supervised/` — concatenated into `Dense(64)` → `Dense(4)`. Fuses learned and engineered features. |
-| **Last-day only** | Uses `Lambda(lambda x: x[:, -1])` to keep only the final frame. The ablation that tells you whether the sequence is earning its keep. |
+Frames are encoded once and cached, then `pack_padded_sequence` masks the
+missing timepoints so the LSTM's final hidden state is the last *valid* frame.
+The encoder is frozen throughout, so gradients touch ~800k parameters rather
+than 11M — the only tractable option with 116 training wells.
 
 ## Audit and fixes
 
-`lstm_model.ipynb` could not run at all as written. Fixed in `train_lstm.py`;
-the notebooks are kept as the original record.
+The original `lstm_model.ipynb` (removed) could not run at all as written.
+All of the following are fixed in `train_lstm.py`:
 
 | # | Defect | Fix |
 |---|---|---|
@@ -122,9 +90,9 @@ the notebooks are kept as the original record.
 | 4 | Re-encoded all 11 frames through ResNet18 every epoch — the encoder is frozen, so this was pure waste | Embeddings computed once and cached (12 s) |
 | 5 | No ablation, so it was unknown whether the sequence helped | Last-frame and mean-pool baselines added |
 
-`second_LSTM.ipynb` (Keras) cannot be re-run: TensorFlow is not installed here.
-Its `main_dir = 'New MLPR Data'` also points at the **raw** images rather than
-the crops, which should be corrected before it is trusted.
+The Keras notebook also read `main_dir = 'New MLPR Data'` — the **raw** images
+rather than the crops — and substituted zero images for missing frames, so it
+failed quietly too.
 
 ## Results
 
@@ -246,21 +214,20 @@ Test accuracy **0.806**, macro-F1 **0.805**.
 - 116 training sequences is very little for an LSTM. A repeated grouped
   cross-validation over all 192 wells would give a far more trustworthy estimate
   than this single 116/40/36 split, and is the clear next step.
-- `second_LSTM.ipynb` remains unverified (no TensorFlow).
 
 ## Original notebook issues (superseded)
 
 Kept for the record; all are addressed by `train_lstm.py` above.
 
-- `lstm_model.ipynb` iterates `os.listdir('Split_Data1/train')` but joins
+- `lstm_model.ipynb` iterated `os.listdir('Split_Data1/train')` but joins
   against `'Final_Data'` — neither exists. The `len(seq)==11` guard turned that
   into a silent zero-sequence run rather than an error.
-- `second_LSTM.ipynb` hardcodes the class folder as `pH{pH} Hydrolytic`. That
+- `second_LSTM.ipynb` hardcoded the class folder as `pH{pH} Hydrolytic`. That
   happens to match the data (there is **no** Enzymatic condition in this
   dataset), but it also reads `main_dir = 'New MLPR Data'` — the *raw* images
   rather than the cropped wells — and substitutes zero images for missing
   frames, so it too fails quietly.
-- The evaluation loop in `lstm_model.ipynb` wraps the encoder in an outer
+- The evaluation loop in `lstm_model.ipynb` wrapped the encoder in an outer
   `torch.no_grad()` while the training loop uses an inner one — harmless, just
   inconsistent.
 - Requiring exactly 11 frames per well was the single most damaging choice:

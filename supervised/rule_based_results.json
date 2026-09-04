@@ -1,0 +1,10 @@
+{
+  "green-shade pixel voting": {
+    "accuracy": 0.15588385124808965,
+    "acid_alkaline": 0.3020886398369842
+  },
+  "mean-green threshold": {
+    "accuracy": 0.2531839021905247,
+    "acid_alkaline": 0.49312277126846665
+  }
+}
