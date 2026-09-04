@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+
+# Image datasets
+New MLPR Data/
+Preprocessed_Data/
+Split_Data/
+
+# Model checkpoints
+*.pth
+*.pt
+*.h5
+*.pkl
+*.joblib
+
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
