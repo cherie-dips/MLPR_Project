@@ -147,6 +147,23 @@ photographs is a genuinely easier task than predicting one photograph.
 
 Early stopping at epoch 76; best val 0.975 at epoch 51.
 
+### Under grouped 5-fold CV (all 192 wells)
+
+The single 36-well test set above carries a ±13 point interval. `cv_lstm.py`
+re-runs the same model with every well tested exactly once:
+
+| | per well | acid vs alkaline |
+|---|---|---|
+| ResNet18(frozen) + LSTM | **0.812 ± 0.027** | **0.995 ± 0.010** |
+
+The 4-way figure is *lower* than simply averaging Random Forest predictions over
+a well (0.928, see `supervised/`), but the acid/alkaline figure is the highest
+in the project — 0.995 means essentially every well is placed in the correct
+clinical band.
+
+The LSTM uses **no elapsed-time feature**; frames are only *ordered*, which is
+what makes it a sequence model rather than a bag of images.
+
 ### The sequence earns its keep
 
 This is the ablation the original notebook lacked, and it is the clearest

@@ -203,13 +203,14 @@ one well = up to 11 cropped images, ordered by elapsed hours
     -> resize 224x224, ImageNet normalise
     -> ResNet18 STEM only: maxpool(relu(bn1(conv1(x))))   # NOT layer4
     -> global average pool                                -> 64-d
-    -> concat 8x8x8 HSV histogram (512-d) + elapsed hours -> 577-d
+    -> concat 8x8x8 HSV histogram (512-d)                 -> 576-d
     -> RandomForest(400 trees, min_samples_leaf=2)        -> class probabilities
   average the probabilities over the well -> argmax
 ```
 
-Grouped 5-fold CV over all 192 wells: **0.788 per image, 0.922 per well,
-0.957 acid-vs-alkaline** — and zero wells cross the acid/alkaline boundary.
+Grouped 5-fold CV over all 192 wells: **0.775 per image, 0.917 per well,
+0.948 acid-vs-alkaline**. (Elapsed time would add ~+0.013 but is deliberately
+excluded — see `supervised/README.md` for why.)
 
 ## Why this arm underperforms — diagnosed
 
@@ -307,8 +308,6 @@ a decision from one photograph.
 use `net.maxpool(net.relu(net.bn1(net.conv1(x))))` instead of
 `net.fc = nn.Identity()`. If a pretrained backbone is to be kept at all, this is
 where its useful features are.
-
-**3. Add elapsed time — worth +2.4 points.** Free, and known at inference time.
 
 **4. Reframe as acid vs alkaline — 0.957, and per-well it is perfect.** The
 per-well confusion for stem+histogram+time over all 192 wells:
