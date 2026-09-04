@@ -20,3 +20,6 @@ __pycache__/
 .venv/
 venv/
 env/
+
+# Cached intermediates from the training scripts (regenerate by re-running)
+_*.npz

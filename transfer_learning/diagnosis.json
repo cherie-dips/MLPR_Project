@@ -1,0 +1,12 @@
+{
+  "colour moments (12-d, mask-aware)": 0.6888297872340425,
+  "HSV histogram 512": 0.7313829787234043,
+  "ResNet18 frozen (ImageNet)": 0.5797872340425532,
+  "ResNet18 fine-tuned": 0.6622340425531915,
+  "ResNet18 ft + histogram": 0.6648936170212766,
+  "histogram + time": 0.7659574468085106,
+  "ResNet18 ft + time": 0.6702127659574468,
+  "ResNet18 ft + histogram + time": 0.6595744680851063,
+  "_perwell_hist_time": 0.9166666666666666,
+  "_perwell_fused": 0.75
+}

@@ -1,0 +1,209 @@
+{
+  "Baseline (majority)": {
+    "params": {},
+    "train": 0.2582837723024639,
+    "val": 0.25365853658536586,
+    "test": 0.2526595744680851,
+    "test_f1": 0.10084925690021232
+  },
+  "KNN": {
+    "params": {
+      "m__metric": "manhattan",
+      "m__n_neighbors": 9,
+      "m__weights": "uniform"
+    },
+    "train": 0.800339847068819,
+    "val": 0.6878048780487804,
+    "test": 0.6835106382978723,
+    "test_f1": 0.6845327984086292,
+    "cm": [
+      [
+        70,
+        14,
+        4,
+        4
+      ],
+      [
+        19,
+        69,
+        4,
+        3
+      ],
+      [
+        4,
+        6,
+        61,
+        22
+      ],
+      [
+        0,
+        2,
+        37,
+        57
+      ]
+    ],
+    "report": "              precision    recall  f1-score   support\n\n         pH5       0.75      0.76      0.76        92\n         pH6       0.76      0.73      0.74        95\n         pH7       0.58      0.66      0.61        93\n         pH8       0.66      0.59      0.63        96\n\n    accuracy                           0.68       376\n   macro avg       0.69      0.68      0.68       376\nweighted avg       0.69      0.68      0.68       376\n"
+  },
+  "SVM": {
+    "params": {
+      "m__C": 10,
+      "m__gamma": "scale",
+      "m__kernel": "rbf"
+    },
+    "train": 0.9906542056074766,
+    "val": 0.6853658536585366,
+    "test": 0.6888297872340425,
+    "test_f1": 0.6880743391612957,
+    "cm": [
+      [
+        70,
+        16,
+        4,
+        2
+      ],
+      [
+        16,
+        73,
+        2,
+        4
+      ],
+      [
+        5,
+        7,
+        57,
+        24
+      ],
+      [
+        1,
+        7,
+        29,
+        59
+      ]
+    ],
+    "report": "              precision    recall  f1-score   support\n\n         pH5       0.76      0.76      0.76        92\n         pH6       0.71      0.77      0.74        95\n         pH7       0.62      0.61      0.62        93\n         pH8       0.66      0.61      0.64        96\n\n    accuracy                           0.69       376\n   macro avg       0.69      0.69      0.69       376\nweighted avg       0.69      0.69      0.69       376\n"
+  },
+  "RandomForest": {
+    "params": {
+      "max_depth": 20,
+      "max_features": "sqrt",
+      "min_samples_leaf": 2,
+      "n_estimators": 400
+    },
+    "train": 1.0,
+    "val": 0.7317073170731707,
+    "test": 0.7287234042553191,
+    "test_f1": 0.7294054109319422,
+    "cm": [
+      [
+        80,
+        7,
+        4,
+        1
+      ],
+      [
+        18,
+        64,
+        7,
+        6
+      ],
+      [
+        5,
+        1,
+        66,
+        21
+      ],
+      [
+        0,
+        3,
+        29,
+        64
+      ]
+    ],
+    "report": "              precision    recall  f1-score   support\n\n         pH5       0.78      0.87      0.82        92\n         pH6       0.85      0.67      0.75        95\n         pH7       0.62      0.71      0.66        93\n         pH8       0.70      0.67      0.68        96\n\n    accuracy                           0.73       376\n   macro avg       0.74      0.73      0.73       376\nweighted avg       0.74      0.73      0.73       376\n"
+  },
+  "MLP": {
+    "params": {
+      "m__alpha": 0.1,
+      "m__hidden_layer_sizes": [
+        64,
+        64
+      ],
+      "m__learning_rate_init": 0.001
+    },
+    "train": 0.9643160577740016,
+    "val": 0.6219512195121951,
+    "test": 0.6622340425531915,
+    "test_f1": 0.6621773550289107,
+    "cm": [
+      [
+        69,
+        15,
+        5,
+        3
+      ],
+      [
+        16,
+        68,
+        4,
+        7
+      ],
+      [
+        8,
+        6,
+        55,
+        24
+      ],
+      [
+        1,
+        7,
+        31,
+        57
+      ]
+    ],
+    "report": "              precision    recall  f1-score   support\n\n         pH5       0.73      0.75      0.74        92\n         pH6       0.71      0.72      0.71        95\n         pH7       0.58      0.59      0.59        93\n         pH8       0.63      0.59      0.61        96\n\n    accuracy                           0.66       376\n   macro avg       0.66      0.66      0.66       376\nweighted avg       0.66      0.66      0.66       376\n"
+  },
+  "RandomForest + time": {
+    "params": {
+      "max_depth": 20,
+      "max_features": "sqrt",
+      "min_samples_leaf": 2,
+      "n_estimators": 400
+    },
+    "train": 1.0,
+    "val": 0.7634146341463415,
+    "test": 0.7686170212765957,
+    "test_f1": 0.7694181663489158,
+    "cm": [
+      [
+        81,
+        7,
+        3,
+        1
+      ],
+      [
+        17,
+        67,
+        8,
+        3
+      ],
+      [
+        3,
+        0,
+        72,
+        18
+      ],
+      [
+        1,
+        1,
+        25,
+        69
+      ]
+    ],
+    "report": "              precision    recall  f1-score   support\n\n         pH5       0.79      0.88      0.84        92\n         pH6       0.89      0.71      0.79        95\n         pH7       0.67      0.77      0.72        93\n         pH8       0.76      0.72      0.74        96\n\n    accuracy                           0.77       376\n   macro avg       0.78      0.77      0.77       376\nweighted avg       0.78      0.77      0.77       376\n"
+  },
+  "_leakage_check": {
+    "image_level_split": 0.7506361323155216,
+    "well_level_split": 0.7287234042553191,
+    "inflation": 0.021912728060202502
+  }
+}
