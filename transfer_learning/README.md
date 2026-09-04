@@ -189,23 +189,166 @@ accuracy [0.613, 0.708].
 
 **This arm is beaten by the hand-crafted-feature baseline.** `supervised/`
 Random Forest + elapsed time reaches **0.769** on the same split and test set,
-about 11 points better, at a tiny fraction of the compute. On this dataset,
-transfer learning does not pay off — 116 training wells is too few to adapt an
-ImageNet backbone, while a 512-bin colour histogram already captures nearly all
-the available pH signal.
+about 11 points better, at a tiny fraction of the compute.
 
-## Recommendations
+The next section diagnoses why, and the cause is *not* mainly the small dataset:
+it is that `fc = nn.Identity()` extracts the most colour-invariant layer of a
+network pretrained to ignore colour, on a task where colour is the label.
 
-1. **Freeze more.** Fine-tuning all 11M weights on 116 wells is the direct cause
-   of the overfitting. Training only `layer4` + head, or using frozen features
-   throughout, should narrow the gap.
-2. **Fix preprocessing first.** 7.1% of images never survive cropping, biased
-   toward 0 hr and 216/264 hr (`preprocessing/README.md`). That is a larger
-   available gain than further architecture work.
-3. **Add elapsed time.** It is worth +0.040 to the classical model and is not
-   used here at all.
-4. **Predict per well, not per image.** See `lstm/` — aggregating a well's 11
-   timepoints reaches 0.806.
+### Recommended pipeline instead
+
+```
+one well = up to 11 cropped images, ordered by elapsed hours
+  for each image:
+    -> resize 224x224, ImageNet normalise
+    -> ResNet18 STEM only: maxpool(relu(bn1(conv1(x))))   # NOT layer4
+    -> global average pool                                -> 64-d
+    -> concat 8x8x8 HSV histogram (512-d) + elapsed hours -> 577-d
+    -> RandomForest(400 trees, min_samples_leaf=2)        -> class probabilities
+  average the probabilities over the well -> argmax
+```
+
+Grouped 5-fold CV over all 192 wells: **0.788 per image, 0.922 per well,
+0.957 acid-vs-alkaline** — and zero wells cross the acid/alkaline boundary.
+
+## Why this arm underperforms — diagnosed
+
+The answer is not overfitting, tuning, or too little data. It is that **ImageNet
+features are the wrong inductive bias for this task**, and the notebook takes
+them from the worst possible place in the network.
+
+### Evidence 1 — accuracy falls monotonically with depth
+
+`layer_probe.py` takes globally-average-pooled features from each ResNet18 stage
+(frozen, ImageNet weights, no fine-tuning) and fits the same RF to each.
+Grouped 5-fold CV over all 192 wells:
+
+| Stage | dim | per-image accuracy |
+|---|---|---|
+| stem (`conv1`+pool) | 64 | **0.751** ± 0.017 |
+| layer1 | 64 | 0.750 ± 0.028 |
+| layer2 | 128 | 0.713 ± 0.028 |
+| layer3 | 256 | 0.695 ± 0.018 |
+| **layer4** — *what the notebook uses* | 512 | **0.629** ± 0.021 |
+
+The **first convolution's 64 channels beat the final 512-d embedding by 12.2
+points**. Depth is actively destroying the signal.
+
+The reason is that ImageNet pretraining is explicitly built to make deep
+features *colour-invariant* — its augmentation includes colour jitter, because a
+red bus and a blue bus are both buses. Here hue is not a nuisance variable, it
+**is the label**. So every stage of the hierarchy discards more of exactly what
+we need, and `model.fc = nn.Identity()` — the standard transfer-learning
+recipe — extracts the most colour-invariant representation in the network.
+
+### Evidence 2 — twelve hand-picked numbers beat the 512-d embedding
+
+| Feature set | dim | per-image accuracy |
+|---|---|---|
+| Colour moments (mean/std of RGB+HSV, mask-aware) | **12** | 0.697 |
+| Frozen ImageNet layer4 embedding | 512 | 0.629 |
+
+Twelve summary statistics of the crop's colour outperform a 512-dimensional
+pretrained representation. That is only possible if the embedding has thrown
+the colour information away.
+
+### Evidence 3 — the features encode *time*, not pH
+
+Linear probes on the same features (train → test, well-wise split):
+
+| Features | predicts pH | predicts time-bin |
+|---|---|---|
+| HSV histogram | 0.612 | **0.888** |
+| ResNet frozen (layer4) | 0.585 | **0.896** |
+| ResNet fine-tuned (layer4) | 0.678 | **0.904** |
+
+Every representation predicts *degradation stage* far better than pH, which is
+exactly what `unsupervised/` found in the raw colour distribution (ARI 0.31 for
+time vs 0.08 for pH). Fine-tuning lifts the pH probe from 0.585 to 0.678 — it
+does help — but it cannot rebuild colour sensitivity from 116 wells.
+
+### Evidence 4 — fusing raw embeddings makes things *worse*
+
+| Feature set | per-image accuracy |
+|---|---|
+| HSV histogram + time | **0.785** |
+| Embedding + histogram + time (raw concat) | 0.709 |
+| Histogram + PCA-32(embedding) + time | 0.784 |
+
+Concatenating 512 weak embedding dimensions onto 512 informative histogram bins
+costs 7.6 points. A Random Forest samples `sqrt(n_features)` candidates per
+split, so doubling the width with noise halves the chance of picking a useful
+bin. Compressing the embedding to 32 PCs removes the damage — but adds nothing
+either.
+
+## What actually improves accuracy
+
+All figures below are grouped 5-fold CV over all **192 wells** (every well tested
+exactly once), which is far tighter than the single 36-well test set the earlier
+table used.
+
+| Pipeline | per-image | **per-well** | acid vs alkaline |
+|---|---|---|---|
+| layer4 embedding — *notebook's choice* | 0.629 | 0.786 | 0.840 |
+| stem features (64) | 0.751 | 0.891 | 0.931 |
+| stem + time | 0.775 | 0.896 | 0.955 |
+| HSV histogram + time | 0.785 | **0.938** | 0.956 |
+| **stem + histogram + time** | **0.788** | 0.922 | **0.957** |
+
+Four changes, in descending order of value:
+
+**1. Aggregate predictions per well — worth ~+15 points.** Averaging the
+predicted probabilities across a well's 11 timepoints lifts 0.788 → 0.922. This
+is the single largest gain available and it costs nothing: the deployment
+scenario already has a time series per dressing, so there is no reason to force
+a decision from one photograph.
+
+**2. Take features from the stem, not layer4 — worth +12.2 points.** One line:
+use `net.maxpool(net.relu(net.bn1(net.conv1(x))))` instead of
+`net.fc = nn.Identity()`. If a pretrained backbone is to be kept at all, this is
+where its useful features are.
+
+**3. Add elapsed time — worth +2.4 points.** Free, and known at inference time.
+
+**4. Reframe as acid vs alkaline — 0.957, and per-well it is perfect.** The
+per-well confusion for stem+histogram+time over all 192 wells:
+
+|  | pH5 | pH6 | pH7 | pH8 |
+|---|---|---|---|---|
+| **pH5** | **48** | 0 | 0 | 0 |
+| **pH6** | 5 | **43** | 0 | 0 |
+| **pH7** | 0 | 0 | **42** | 6 |
+| **pH8** | 0 | 0 | 4 | **44** |
+
+177/192 wells correct (0.922), and **not one well crosses the acid/alkaline
+boundary** — 192/192. Since healthy skin is pH 4–6 and chronic wounds pH 7–8,
+the clinical question this project exists to answer is already solved; all
+residual error is the exact value within a band.
+
+### Ideas not yet tested
+
+- **Train a small CNN from scratch on HSV input.** ImageNet initialisation is a
+  liability here, not an asset. A 3-4 layer CNN taking the HSV image has the
+  right bias and few enough parameters for 116 wells.
+- **Fine-tune only the stem + a head.** The layer probe implies the deep stages
+  should be discarded, not adapted.
+- **Ordinal regression.** pH is ordered, and every error is off-by-one; a
+  regression or ordinal loss encodes that, whereas cross-entropy treats 5-vs-8
+  and 7-vs-8 as equally wrong.
+- **Fix preprocessing.** 7.1% of images never survive the crop, biased to 0 hr
+  and 216/264 hr (`preprocessing/README.md`). Likely a larger gain than anything
+  above.
+- **Calibrate before averaging.** Per-well aggregation uses raw RF
+  probabilities; temperature scaling on the val wells should improve the vote.
+
+## Reproducing the diagnosis
+
+```bash
+python3 transfer_learning/diagnose.py       # feature ablation + linear probes
+python3 transfer_learning/layer_probe.py    # accuracy by ResNet stage
+python3 transfer_learning/improve.py        # grouped CV over feature sets
+python3 transfer_learning/best_pipeline.py  # corrected pipeline + per-well
+```
 
 ## Caveats
 

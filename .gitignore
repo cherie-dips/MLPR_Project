@@ -24,3 +24,4 @@ env/
 # Cached intermediates from the training scripts (regenerate by re-running)
 *_features.npz
 *_embeddings.npz
+transfer_learning/_*.npz
