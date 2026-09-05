@@ -29,7 +29,8 @@ y=np.array([CLASSES.index(int(r["pH"])) for r in rows])
 well=np.array([f'{r["pH"]}_{r["well"]}' for r in rows])
 H=np.load("supervised/_features.npz",allow_pickle=True)["X"]          # HSV histogram 512
 M=np.load("transfer_learning/_moments.npz")["M"]                      # colour moments 12
-S=np.load("transfer_learning/_stem.npz")["S"]                         # ResNet stem 64
+S=np.load("transfer_learning/_stem.npz")["S"]                         # ResNet stem, avg pool 64
+B=np.load("transfer_learning/_best_features.npz")["X"]                # stem avg+std + histogram 640
 d=np.load("lstm/_embeddings.npz",allow_pickle=True)
 idx={p:i for i,p in enumerate(d["paths"])}
 E=d["E"][[idx[r["path"]] for r in rows]]                              # ResNet layer4 512
@@ -65,6 +66,7 @@ res["colour moments (12)"]        = cv(M, RF, "colour moments (12)")
 res["ResNet layer4 emb (512)"]    = cv(E, RF, "ResNet layer4 emb (512)")
 res["ResNet stem (64)"]           = cv(S, RF, "ResNet stem (64)")
 res["HSV histogram (512)"]        = res["Random Forest"]
-res["stem + histogram (576)"]     = cv(np.hstack([S,H]), RF, "stem + histogram (576)")
+res["stem(avg) + histogram (576)"] = cv(np.hstack([S,H]), RF, "stem(avg) + histogram (576)")
+res["stem(avg+std) + histogram (640)"] = cv(B, RF, "stem(avg+std) + histogram (640)  <- best")
 json.dump(res,open("final_results_no_time.json","w"),indent=2)
 print("\nwrote final_results_no_time.json")

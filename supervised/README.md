@@ -223,6 +223,11 @@ cropped well image
 
 **0.755 accuracy, 0.931 acid-vs-alkaline** (per image, grouped 5-fold CV).
 
+This is the strongest model using colour features alone. The best model overall
+is in `transfer_learning/` — the same histogram concatenated with an avg+std
+pooled ResNet18 **stem**, reaching **0.808**. Note it uses only the first
+convolution of the backbone; the deeper layers actively hurt.
+
 ## Remaining caveats
 
 - The 7.1% of images that fail to crop (`preprocessing/README.md`) are absent

@@ -26,7 +26,8 @@ and leaves only a small head to fit.
 | `layer_probe.py` | Accuracy of each ResNet18 stage — the core diagnosis |
 | `diagnose.py` | Feature ablation and linear probes |
 | `improve.py` | Grouped CV across feature sets |
-| `best_pipeline.py` | The corrected pipeline (stem + histogram) |
+| `best_pipeline.py` | **The final model** — stem (avg+std) + histogram → RF |
+| `stem_variants.py` | How to pool the stem: avg vs avg+std vs spatial |
 
 Three notebooks were removed: `transfer_learning.ipynb` (the main experiment),
 `model_analysis.ipynb` (a cell-by-cell duplicate of its ResNet18 section) and
@@ -141,29 +142,36 @@ cropped well image
 Test accuracy **0.662**, macro-F1 **0.660**, macro AUC **0.879** — 95% CI on
 accuracy [0.613, 0.708].
 
-**This arm is beaten by the hand-crafted-feature baseline.** `supervised/`
-Random Forest on the HSV histogram reaches **0.755** under grouped CV against
-this arm's **0.629** for the layer4 embedding — about 13 points better, at a
-tiny fraction of the compute.
+**As written, this arm loses to the hand-crafted-feature baseline.**
+`supervised/` Random Forest on the HSV histogram reaches **0.755** under grouped
+CV against **0.629** for the layer4 embedding — 13 points better, at a fraction
+of the compute.
 
-The next section diagnoses why, and the cause is *not* mainly the small dataset:
-it is that `fc = nn.Identity()` extracts the most colour-invariant layer of a
-network pretrained to ignore colour, on a task where colour is the label.
+The cause is *not* mainly the small dataset: `fc = nn.Identity()` extracts the
+most colour-invariant layer of a network pretrained to ignore colour, on a task
+where colour is the label. Once that is fixed the ordering reverses — the
+corrected pipeline in **Final architecture** above reaches **0.808**, the best
+result in the project. The next section is the diagnosis.
 
 ### Recommended pipeline instead
 
 ```
 one cropped well image
-    -> resize 224x224, ImageNet normalise
-    -> ResNet18 STEM only: maxpool(relu(bn1(conv1(x))))   # NOT layer4
-    -> global average pool                                -> 64-d
-    -> concat 8x8x8 HSV histogram (512-d)                 -> 576-d
-    -> RandomForest(400 trees, min_samples_leaf=2)        -> pH
+  -> resize 224x224, ImageNet normalise
+  -> ResNet18 STEM only: maxpool(relu(bn1(conv1(x))))   # NOT layer4  -> (64,56,56)
+  -> concat [ spatial mean (64) , spatial std (64) ]                  -> 128-d
+  -> concat 8x8x8 HSV histogram, L2-normalised (512)                  -> 640-d
+  -> RandomForest(400 trees, min_samples_leaf=2)
+  -> pH in {5, 6, 7, 8}
 ```
 
-Grouped 5-fold CV: **0.775 accuracy, 0.948 acid-vs-alkaline**, per image.
-(Elapsed time would add ~+0.013 but is deliberately excluded — see
-`supervised/README.md` for why.)
+Grouped 5-fold CV, **per image**: accuracy **0.808 ± 0.021**, macro-F1 **0.806**,
+acid-vs-alkaline **0.955 ± 0.010**. This is the best model in the project.
+
+```bash
+python3 transfer_learning/best_pipeline.py                  # evaluate
+python3 transfer_learning/best_pipeline.py --save model.pkl # fit on all data
+```
 
 ## Why this arm underperforms — diagnosed
 
@@ -242,38 +250,47 @@ exactly once, far tighter than the single 36-well test set the earlier table
 used. Per-well aggregation is not reported: it answers an easier question and
 shrinks the effective sample from 1963 to 192.
 
-| Pipeline | accuracy | acid vs alkaline |
-|---|---|---|
-| layer4 embedding — *notebook's choice* | 0.629 ± 0.021 | 0.840 |
-| colour moments (12) | 0.697 ± 0.023 | 0.901 |
-| stem features (64) | 0.751 ± 0.017 | 0.931 |
-| HSV histogram (512) | 0.755 ± 0.017 | 0.931 |
-| **stem + histogram (576)** | **0.775 ± 0.017** | **0.948** |
+| Pipeline | dim | accuracy | acid vs alkaline |
+|---|---|---|---|
+| layer4 embedding — *notebook's choice* | 512 | 0.629 ± 0.021 | 0.840 |
+| colour moments | 12 | 0.697 ± 0.023 | 0.901 |
+| stem, avg pool | 64 | 0.751 ± 0.017 | 0.931 |
+| HSV histogram | 512 | 0.755 ± 0.017 | 0.931 |
+| stem (avg) + histogram | 576 | 0.775 ± 0.017 | 0.948 |
+| stem, avg+**std** pool | 128 | 0.793 ± 0.017 | — |
+| **stem (avg+std) + histogram** | **640** | **0.808 ± 0.021** | **0.955** |
 
-Three changes, in descending order of value:
+Four changes, in descending order of value:
 
 **1. Take features from the stem, not layer4 — worth +12.2 points.** One line:
 use `net.maxpool(net.relu(net.bn1(net.conv1(x))))` instead of
 `net.fc = nn.Identity()`. If a pretrained backbone is to be kept at all, this is
 where its useful features are.
 
-**2. Add the colour histogram alongside the stem — worth +2.4 points**
-(0.751 → 0.775). The two are complementary: the stem's 64 channels are learned
-edge/colour filters, the histogram is an explicit high-resolution colour
-distribution.
+**2. Pool the stem with std as well as mean — worth +4.1 points**
+(0.752 → 0.793), the largest single gain after the layer choice. Global average
+pooling asks only *what colour is the gel*; the per-channel standard deviation
+over the 56×56 map also asks *how uneven is it*. Degradation makes gels patchy,
+so that heterogeneity is real signal, and averaging alone discards it. Note it
+beats richer spatial poolings (2×2 → 0.769, 3×3 → 0.789) at a quarter the
+dimensionality — the *variation* matters, its spatial location does not.
 
-**3. Reframe as acid vs alkaline — 0.948.** Confusion for stem + histogram,
+**3. Add the colour histogram alongside the stem — worth +1.5 points**
+(0.793 → 0.808). Complementary: 64 learned filters plus an explicit
+high-resolution colour distribution.
+
+**4. Reframe as acid vs alkaline — 0.955.** Confusion for the final pipeline,
 per image, pooled over the 5 folds:
 
 |  | pH5 | pH6 | pH7 | pH8 |
 |---|---|---|---|---|
-| **pH5** | **429** | 49 | 12 | 2 |
-| **pH6** | 56 | **399** | 29 | 19 |
-| **pH7** | 7 | 18 | **320** | 126 |
-| **pH8** | 2 | 14 | 108 | **373** |
+| **pH5** | **442** | 36 | 10 | 4 |
+| **pH6** | 61 | **400** | 21 | 21 |
+| **pH7** | 2 | 17 | **357** | 95 |
+| **pH8** | 1 | 12 | 97 | **387** |
 
-Of 1,963 images, 442 are wrong but only **103 (5.2%) cross the acid/alkaline
-boundary** — the rest are adjacent-pH slips, dominated by pH7↔pH8 (234 of 442).
+Of 1,963 images, 377 are wrong but only **88 (4.5%) cross the acid/alkaline
+boundary** — the rest are adjacent-pH slips, dominated by pH7↔pH8 (192 of 377).
 Since healthy skin is pH 4–6 and chronic wounds pH 7–8, the clinical question is
 far better answered than the 4-way figure suggests.
 
