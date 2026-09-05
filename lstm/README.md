@@ -69,8 +69,22 @@ The acid/alkaline figure is the strongest in the project — essentially every w
 lands in the correct clinical band, which is the distinction that matters given
 healthy skin sits at pH 4–6 and chronic wounds at pH 7–8.
 
-Train and validation accuracy track each other closely across folds: dropout 0.5
-and weight decay on a small head over frozen embeddings keep the fit controlled.
+### Train / validation / test
+
+Training once on the fixed 116-well train split, early-stopping on the 40
+validation wells:
+
+| split | wells | accuracy | macro-F1 | acid/alk |
+|---|---|---|---|---|
+| train | 116 | 0.974 | 0.974 | 1.000 |
+| validation | 40 | 0.950 | 0.948 | 0.975 |
+| test | 36 | 0.833 | 0.830 | 0.972 |
+
+Train → validation gap: **+0.024** — far narrower than the Random Forest arms
+(+0.24 to +0.27), because dropout 0.5 and weight decay on a small head over
+frozen embeddings keep the fit controlled. The validation-to-test drop is wider
+than that gap, which is what 40- and 36-well splits look like: the 5-fold CV
+figure of 0.812 is the more reliable estimate.
 
 ### Ablation — does the sequence earn its keep?
 

@@ -84,9 +84,24 @@ Grouped 5-fold CV over all 192 wells, per image:
 All four learners clear the 0.214 baseline by a wide margin, so colour histograms
 genuinely carry pH signal.
 
+### Train / validation / test
+
+The CV figures above pool held-out predictions, so they say nothing about the fit
+on training data. Fitting the Random Forest once on the fixed 116-well train
+split and scoring all three:
+
+| split | wells | images | accuracy | macro-F1 | acid/alk |
+|---|---|---|---|---|---|
+| train | 116 | 1,177 | 1.000 | 1.000 | 1.000 |
+| validation | 40 | 410 | 0.729 | 0.729 | 0.915 |
+| test | 36 | 376 | 0.731 | 0.732 | 0.926 |
+
+Train → validation gap: **+0.271**. Validation and test agree to within 0.002,
+so the held-out estimate is stable.
+
 ### Fit
 
-The Random Forest reaches 1.000 training accuracy against ~0.75 test. The grid
+The Random Forest reaches 1.000 training accuracy against ~0.73 validation. The grid
 covered `max_depth`, `min_samples_leaf` and `max_features`, and the most heavily
 regularised settings did not improve validation accuracy — with 116 training
 *wells* in 169 effective dimensions, the gap reflects the size of the dataset

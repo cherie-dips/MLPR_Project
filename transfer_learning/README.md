@@ -96,9 +96,25 @@ Building it up, per image, grouped 5-fold CV:
 Macro-F1 **0.806**. Feature importance splits across all three blocks — stem
 mean, stem std and histogram each contribute, none dominates.
 
+### Train / validation / test
+
+The CV figures pool held-out predictions across all 192 wells. Fitting once on
+the fixed 116-well train split and scoring all three shows the fit:
+
+| split | wells | images | accuracy | macro-F1 | acid/alk |
+|---|---|---|---|---|---|
+| train | 116 | 1,177 | 0.999 | 0.999 | 1.000 |
+| validation | 40 | 410 | 0.756 | 0.755 | 0.944 |
+| test | 36 | 376 | 0.779 | 0.779 | 0.960 |
+
+Train → validation gap: **+0.243**. The Random Forest fits the training wells
+almost completely; validation and test agree within the noise of a 36–40 well
+split.
+
 ### Where the errors are
 
-Confusion pooled over the 5 folds (rows = true):
+Confusion pooled over the 5 CV folds (rows = true), covering all 1,963 images as
+held-out predictions:
 
 |  | pH5 | pH6 | pH7 | pH8 |
 |---|---|---|---|---|
