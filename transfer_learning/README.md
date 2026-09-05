@@ -1,6 +1,6 @@
 # Transfer Learning — ResNet18 stem + Random Forest
 
-**The best model in the project: 0.798 per-image accuracy.**
+**The best model in the project: 0.796 per-image accuracy.**
 
 **Notebook:** `resnet_rf.ipynb`
 
@@ -23,15 +23,14 @@ each, grouped 5-fold CV:
 
 | Stage | dim | per-image accuracy |
 |---|---|---|
-| **stem** (`conv1`+bn+relu+pool) | 64 | **0.749 ± 0.014** |
-| layer1 | 64 | **0.752 ± 0.019** |
-| layer2 | 128 | 0.703 ± 0.030 |
-| layer3 | 256 | 0.678 ± 0.025 |
-| layer4 | 512 | 0.611 ± 0.020 |
+| **stem** (`conv1`+bn+relu+pool) | 64 | **0.752 ± 0.021** |
+| layer1 | 64 | 0.744 ± 0.020 |
+| layer2 | 128 | 0.688 ± 0.037 |
+| layer3 | 256 | 0.669 ± 0.045 |
+| layer4 | 512 | 0.598 ± 0.041 |
 
-Accuracy falls with depth. The two shallowest stages are tied within the fold
-spread and both carry roughly 14 points more pH signal than the 512-d final
-embedding, so this pipeline uses the stem — the cheapest of the two — and
+Accuracy falls monotonically with depth, and the stem carries **15.3 points**
+more pH signal than the 512-d final embedding. So this pipeline uses the stem and
 discards everything deeper.
 
 Two supporting measurements in the notebook:
@@ -62,12 +61,12 @@ and degradation makes gels patchy, so that heterogeneity is signal.
 
 | Pooling | dim | accuracy |
 |---|---|---|
-| avg | 64 | 0.750 ± 0.014 |
-| **avg + std** | **128** | **0.797 ± 0.017** |
-| 2×2 spatial | 256 | 0.769 ± 0.029 |
-| 3×3 spatial | 576 | 0.789 ± 0.034 |
+| avg | 64 | 0.752 ± 0.021 |
+| **avg + std** | **128** | **0.788 ± 0.019** |
+| 2×2 spatial | 256 | 0.760 ± 0.026 |
+| 3×3 spatial | 576 | 0.781 ± 0.023 |
 
-Adding std is worth about +4.7 points, and beats richer *spatial* pooling at a
+Adding std is worth about +3.6 points, and beats richer *spatial* pooling at a
 quarter the dimensionality — the variation matters, its location does not.
 
 ## Final architecture
@@ -82,8 +81,8 @@ cropped well image
   -> pH in {5, 6, 7, 8}
 ```
 
-**Why 100 trees.** Accuracy saturates well before this: 400 trees scores 0.808
-and 800 scores 0.809, differences inside the ±0.02 fold spread, while 100 keeps
+**Why 100 trees.** Accuracy saturates well before this — 400 and 800 trees score
+within the fold spread of 100 — while 100 keeps
 the fitted model roughly 4× smaller (4.6 MB vs 18.3 MB) and 3.5× faster to fit.
 `n_estimators` averages variance *across* trees rather than constraining any one
 of them, so it trades model size against a small amount of accuracy, not against
@@ -93,19 +92,18 @@ Building it up, per image, grouped 5-fold CV:
 
 | Features | dim | accuracy | acid/alk |
 |---|---|---|---|
-| ResNet18 layer4 embedding | 512 | 0.611 ± 0.020 | — |
-| stem, avg pool | 64 | 0.750 ± 0.014 | — |
-| HSV histogram | 512 | 0.745 ± 0.007 | — |
-| stem, avg+std pool | 128 | 0.797 ± 0.017 | — |
-| **stem (avg+std) + histogram** | **640** | **0.798 ± 0.016** | **0.952** |
+| ResNet18 layer4 embedding | 512 | 0.598 ± 0.041 | — |
+| stem, avg pool | 64 | 0.752 ± 0.021 | — |
+| HSV histogram | 512 | 0.759 ± 0.027 | — |
+| stem, avg+std pool | 128 | 0.788 ± 0.019 | — |
+| **stem (avg+std) + histogram** | **640** | **0.796 ± 0.031** | **0.950** |
 
-Macro-F1 **0.796**. Feature importance splits across all three blocks — stem
-mean 0.28, stem std 0.35, histogram 0.37 — none dominates.
+Macro-F1 **0.797**. Feature importance splits across all three blocks — none
+dominates.
 
-The last two rows sit within one fold's noise of each other on a single CV seed.
-Averaged over three seeds the ordering is consistent (0.796 vs 0.800), so the
-histogram earns its place, but only just: the 128-d stem alone is a viable
-simplification if feature count matters more than half a point.
+The last two rows sit close together relative to the fold spread; the 128-d stem
+alone is a viable simplification if feature count matters more than half a
+point.
 
 ### Train / validation / test
 
@@ -114,11 +112,11 @@ the fixed 116-well train split and scoring all three shows the fit:
 
 | split | wells | images | accuracy | macro-F1 | acid/alk |
 |---|---|---|---|---|---|
-| train | 116 | 1,177 | 0.999 | 0.999 | 1.000 |
-| validation | 40 | 410 | 0.751 | 0.751 | 0.944 |
-| test | 36 | 376 | 0.785 | 0.785 | 0.968 |
+| train | 116 | 1,264 | 0.999 | 0.999 | 1.000 |
+| validation | 40 | 435 | 0.763 | 0.764 | 0.933 |
+| test | 36 | 392 | 0.781 | 0.781 | 0.957 |
 
-Train → validation gap: **+0.248**. An unpruned Random Forest grows every tree
+Train → validation gap: **+0.236**. An unpruned Random Forest grows every tree
 to purity, so it interpolates the training set by construction — training
 accuracy is ~1.0 at every forest size and at every `max_depth` above 6. The gap
 is a property of the estimator rather than a symptom: constraining the forest
@@ -128,18 +126,12 @@ wells, so the training fit does not inflate it.
 
 ### Where the errors are
 
-Confusion pooled over the 5 CV folds (rows = true), covering all 1,963 images as
-held-out predictions:
+Confusion pooled over the 5 CV folds, covering all 2,091 images as held-out
+predictions:
 
-|  | pH5 | pH6 | pH7 | pH8 |
-|---|---|---|---|---|
-| **pH5** | **435** | 42 | 9 | 6 |
-| **pH6** | 61 | **396** | 24 | 22 |
-| **pH7** | 4 | 16 | **346** | 105 |
-| **pH8** | 1 | 12 | 95 | **389** |
-
-Of 1,963 images, 397 are wrong but only **94 (4.8%) cross the acid/alkaline
-boundary**; the rest are adjacent-pH slips, dominated by pH7↔pH8 (200 of 397). Since healthy
+Of 2,091 images, 427 are wrong but only **104 (5.0%) cross the acid/alkaline
+boundary**; the rest are adjacent-pH slips, dominated by pH7↔pH8. The notebook
+plots the full 4×4 matrix and its collapse to the binary question. Since healthy
 skin is pH 4–6 and chronic wounds pH 7–8, the clinically important call is far
 better answered than the 4-way figure suggests.
 
@@ -155,8 +147,11 @@ better answered than the 4-way figure suggests.
 - **Probability calibration.** Raw Random Forest votes are poorly calibrated;
   temperature or isotonic scaling on the validation wells would make the
   confidence scores usable, which matters for a clinical readout.
-- **Higher crop coverage.** 7.1% of images are not recovered by the crop stage
-  (`preprocessing/README.md`), biased toward 0 hr and 216/264 hr.
+- **More wells.** A learning curve over subsampled wells still climbs steeply at
+  the full 192 and fits `acc = 0.942 - 1.390·n^(-0.453)`; reaching 0.82 needs
+  roughly 214 training wells (1.4× current). Well count, not model capacity, is
+  the binding constraint — regularising the forest narrows the train/validation
+  gap but costs up to 11 points of held-out accuracy.
 
 ## Running
 

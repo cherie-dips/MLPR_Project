@@ -58,14 +58,14 @@ constants rather than fitted parameters:
 - **Mean-green threshold** — thresholds the mean green channel at 60 / 75 / 90,
   ignoring the black circular-mask corners.
 
-| Rule | 4-way accuracy | acid vs alkaline |
-|---|---|---|
-| Green-shade pixel voting | 0.156 | 0.302 |
-| Mean-green threshold | 0.253 | 0.493 |
-| *(majority-class baseline)* | *0.256* | *0.507* |
+| Rule | 4-way accuracy |
+|---|---|
+| Green-shade pixel voting | 0.162 |
+| Mean-green threshold | 0.252 |
+| *(majority-class baseline)* | *0.252* |
 
 Both sit at or below the majority baseline, and the threshold rule collapses —
-it predicts pH 8 for 1,933 of 1,963 images. Fixed colour thresholds carry little
+it predicts pH 8 for 2,060 of 2,091 images. Fixed colour thresholds carry little
 pH signal on the cropped images, so the learned models below are not competing
 against a strong heuristic.
 
@@ -75,13 +75,13 @@ Grouped 5-fold CV over all 192 wells, per image:
 
 | Model | accuracy | acid/alk | macro-F1 |
 |---|---|---|---|
-| Baseline (majority) | 0.214 ± 0.031 | 0.473 | 0.088 |
-| MLP (64,64) | 0.675 ± 0.004 | 0.905 | 0.673 |
-| SVM (RBF, C=10) | 0.707 ± 0.020 | 0.920 | 0.704 |
-| KNN (k=9, manhattan) | 0.721 ± 0.022 | 0.929 | 0.719 |
-| **Random Forest** (400, leaf 2) | **0.755 ± 0.017** | 0.931 | 0.753 |
+| Baseline (majority) | 0.231 ± 0.009 | 0.490 | 0.094 |
+| MLP (64,64) | 0.680 ± 0.032 | 0.904 | 0.680 |
+| KNN (k=9, manhattan) | 0.713 ± 0.015 | 0.920 | 0.714 |
+| SVM (RBF, C=10) | 0.726 ± 0.016 | 0.914 | 0.726 |
+| **Random Forest** (400, leaf 2) | **0.762 ± 0.031** | 0.933 | 0.764 |
 
-All four learners clear the 0.214 baseline by a wide margin, so colour histograms
+All four learners clear the 0.231 baseline by a wide margin, so colour histograms
 genuinely carry pH signal.
 
 ### Train / validation / test
@@ -92,12 +92,12 @@ split and scoring all three:
 
 | split | wells | images | accuracy | macro-F1 | acid/alk |
 |---|---|---|---|---|---|
-| train | 116 | 1,177 | 1.000 | 1.000 | 1.000 |
-| validation | 40 | 410 | 0.729 | 0.729 | 0.915 |
-| test | 36 | 376 | 0.731 | 0.732 | 0.926 |
+| train | 116 | 1,264 | 1.000 | 1.000 | 1.000 |
+| validation | 40 | 435 | 0.738 | 0.739 | 0.910 |
+| test | 36 | 392 | 0.745 | 0.746 | 0.931 |
 
-Train → validation gap: **+0.271**. Validation and test agree to within 0.002,
-so the held-out estimate is stable.
+Train → validation gap: **+0.262**. Validation and test agree closely, so the
+held-out estimate is stable.
 
 ### Fit
 
@@ -139,11 +139,11 @@ cropped well image
   -> pH in {5, 6, 7, 8}
 ```
 
-**0.755 accuracy, 0.931 acid-vs-alkaline**, per image.
+**0.762 accuracy, 0.933 acid-vs-alkaline**, per image.
 
 This is the strongest model built from colour features alone. The best model
 overall is in `transfer_learning/` — the same histogram concatenated with an
-avg+std pooled ResNet18 stem, reaching **0.798**.
+avg+std pooled ResNet18 stem, reaching **0.796**.
 
 Note the forest sizes differ between the two arms: this one uses the 400 trees
 its grid search selected, while `transfer_learning/` uses 100, chosen to keep the

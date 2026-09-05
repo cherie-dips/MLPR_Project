@@ -35,11 +35,10 @@ the answer.
 
 | | |
 |---|---|
-| PC1 | 10.6% |
-| PC2 | 7.6% |
-| PC1 + PC2 | **18.1%** |
+| PC1 | 10.3% |
+| PC2 | 7.4% |
+| PC1 + PC2 | **17.7%** |
 | PCs for 90% variance | **94** of 169 |
-| PCs for 95% variance | 117 of 169 |
 
 There is no dominant axis. A 2D scatter shows less than a fifth of the variance,
 so any visual claim of clean separation from such a plot would be an artefact.
@@ -56,21 +55,21 @@ k-means, k=4, on the 94-component PCA space:
 
 | Grouping | ARI | NMI |
 |---|---|---|
-| **pH** | +0.083 | 0.097 |
-| **Degradation time** (4 bins) | **+0.309** | **0.393** |
-| Degradation time (all 11) | +0.148 | 0.347 |
-| Physical well | +0.001 | 0.052 |
+| **pH** | +0.077 | 0.089 |
+| **Degradation time** (4 bins) | **+0.334** | **0.409** |
+| Degradation time (all 11) | +0.160 | 0.359 |
+| Physical well | +0.000 | 0.043 |
 
-**Clusters track degradation time roughly 3.7× more strongly than pH.** The
+**Clusters track degradation time roughly 4.3× more strongly than pH.** The
 result reproduces across algorithms:
 
 | Algorithm (k=4) | ARI vs pH | ARI vs time |
 |---|---|---|
-| k-means | +0.083 | **+0.309** |
-| Gaussian Mixture | +0.081 | **+0.344** |
-| Agglomerative (ward) | +0.084 | **+0.314** |
+| k-means | +0.077 | **+0.334** |
+| Gaussian Mixture | +0.073 | **+0.349** |
+| Agglomerative (ward) | +0.070 | **+0.352** |
 
-The near-zero ARI against *well* identity (+0.001) is reassuring: images do not
+The near-zero ARI against *well* identity (+0.000) is reassuring: images do not
 cluster by which individual gel they came from, so the crops are not encoding
 per-well artefacts such as plate position or lighting.
 

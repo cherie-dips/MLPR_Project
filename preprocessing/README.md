@@ -61,21 +61,40 @@ order until one yields a valid well.
 | | |
 |---|---|
 | Raw images | 2,112 |
-| Cropped | **1,963** |
-| Not recovered | 149 (7.1%) |
+| Cropped | **2,091** |
+| Not recovered | 21 (1.0%) |
 
-Recovery is lowest where the green mask fits least well — at 0 hr, where the gel
-is palest, and at 216/264 hr, where it is darkest:
+Detection runs in two stages. The green ranges above handle most images; where
+they fail a **saturation fallback** takes over, which raises coverage from 92.9%
+to **99.0%**.
 
-| Timepoint | 0 hr | 24 | 30 | 48 | 95 | 120 | 168 | 192 | 216 | 264 |
-|---|---|---|---|---|---|---|---|---|---|---|
-| Not recovered | 68 | 4 | 1 | 2 | 6 | 6 | 4 | 11 | 24 | 23 |
+### Saturation fallback
 
-The notebook plots this by timepoint and by pH. Downstream results are therefore
-conditional on a successful crop, and the fresh and heavily-degraded states are
-slightly under-represented. A per-image adaptive threshold — Otsu on the
-saturation channel, or a Hough circle on the well rim, which does not depend on
-gel colour — would raise coverage further.
+The green ranges assume the gel is green, which does not hold everywhere: at
+0 hr a bright reflection band cuts across the well and drops its contour
+circularity below threshold, and at the late timepoints the gel is a pale
+olive-grey matching no green range.
+
+In both cases the well is still a bright, well-defined disc in the **saturation**
+channel, because the plate background is unsaturated (grey or white) while the
+well interior is not. The fallback is:
+
+```
+saturation channel -> Gaussian blur -> Otsu threshold
+  -> morphological close/open (9x9)
+  -> largest contour -> CONVEX HULL      (fills the notch a reflection carves)
+  -> minEnclosingCircle
+  -> reject if hull fills <72% of its circle, or radius outside 0.18-0.62 of the frame
+  -> prefer wells fully inside the frame (neighbouring wells are clipped by the edge)
+```
+
+The plate geometry is fixed, so the detected **centre** is combined with the
+dataset's standard radius (475 px, the median of the green detector's crops).
+Recovered crops then match the existing ones geometrically — median height 950 px
+against 951 for the originals.
+
+This recovers 128 of the 149 previously-missed images. The 21 that remain are
+spread thinly across timepoints.
 
 ## Colour descriptors
 
@@ -106,8 +125,8 @@ The 192 wells are shuffled with `random.seed(42)`, stratified by pH, and split
 | | train | val | test |
 |---|---|---|---|
 | **wells** | 116 | 40 | 36 |
-| images | 1,177 | 410 | 376 |
-| pH 5 / 6 / 7 / 8 | 294/304/281/298 | 106/104/97/103 | 92/95/93/96 |
+| images | 1,264 | 435 | 392 |
+| pH 5 / 6 / 7 / 8 | 318/314/315/317 | 109/109/107/110 | 97/97/99/99 |
 
 The notebook asserts that no well appears in more than one split.
 
