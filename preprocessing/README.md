@@ -30,7 +30,7 @@ pH-sensitive fluorescent silk fibroin hydrogel dressings imaged in well plates.
 pH, so `W13` names four different physical gels. The physical well is the
 `(pH, well)` pair. This matters enormously for splitting — see below.
 
-## `crop_wells.py` — well detection and circular crop
+## `preprocessing.ipynb` — well detection and circular crop
 
 Isolates the hydrogel well from each photograph so the model sees gel colour,
 not plate background or labels.
@@ -56,7 +56,7 @@ not plate background or labels.
 
 The original notebook held several `lower_green`/`upper_green` variants, because
 gel colour shifts with both pH and degradation time and one global range loses
-wells at the extremes. `crop_wells.py` keeps all of them in `GREEN_RANGES` and
+wells at the extremes. `preprocessing.ipynb` keeps all of them in `GREEN_RANGES` and
 tries them in order until one yields a valid well, which recovers more images
 than any single range: at 0 hr — the worst timepoint — it finds **146/192**
 wells against the original **124/192**.
@@ -91,7 +91,7 @@ no exception is raised, the image simply never appears in `Preprocessed_Data/`.
 
 ## Colour descriptors
 
-Implemented in `supervised/train_supervised.py`; the descriptors the original
+Implemented in `supervised/supervised_models.ipynb`; the descriptors the original
 notebook explored were:
 
 - *RGB histogram* — 256 bins/channel, sum-normalised.
@@ -126,15 +126,15 @@ The original `feature_extraction.ipynb` (removed) parsed
 Every accuracy previously reported from `Split_Data/` is measured under this
 leakage.
 
-## `build_split.py` — the corrected split
+## `preprocessing.ipynb` — the corrected split
 
 Groups by the physical `(pH, well)` pair — 192 groups — and splits those,
 stratified by pH. Emits a manifest CSV rather than copying ~2 GB of images
 again, so the split is reproducible and costs no disk.
 
 ```bash
-python3 preprocessing/crop_wells.py      # New MLPR Data/ -> Preprocessed_Data/
-python3 preprocessing/build_split.py     # writes preprocessing/splits.csv
+# open in Jupyter and Run All, or execute headlessly:
+jupyter nbconvert --to notebook --execute --inplace preprocessing/preprocessing.ipynb
 ```
 
 | | train | val | test |
@@ -169,12 +169,12 @@ embeddings, where a network *can* memorise individual wells.
 
 | Path | Produced by | Consumed by |
 |---|---|---|
-| `Preprocessed_Data/` | `crop_wells.py` | all model folders |
-| `preprocessing/splits.csv` | `build_split.py` | all model folders |
+| `Preprocessed_Data/` | `preprocessing.ipynb` | all model folders |
+| `preprocessing/splits.csv` | `preprocessing.ipynb` | all model folders |
 | `Split_Data/` | *(legacy, leaky)* | **do not use** |
 
 ## Running
 
-`build_split.py` runs from the repo root. The notebooks' paths are also relative
+`preprocessing.ipynb` runs from the repo root. The notebooks' paths are also relative
 to the repo root, so start Jupyter there or `os.chdir("..")` in the first cell.
 The image directories are `.gitignore`d and must be present locally.

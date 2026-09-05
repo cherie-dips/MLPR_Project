@@ -8,7 +8,7 @@ Pipeline position:
 
 ```
 raw images
-  -> preprocessing/crop_wells.py   (well detection, circular crop)
+  -> preprocessing/preprocessing.ipynb   (well detection, circular crop)
   -> hydrogel_dataset.csv       (well -> 11 filenames, built here)
   -> THIS FOLDER                (CNN encoder per frame -> LSTM -> pH)
 ```
@@ -17,43 +17,18 @@ The motivation is that a single photograph is ambiguous: the same hue can mean
 pH 6 early in degradation or pH 7 late. How the colour *changes over time* is
 more discriminative than any one frame, and that is a sequence problem.
 
-## The sequence index — `hydrogel_dataset.csv`
+## Notebook
 
-Written by the original `lstm_model.ipynb` (removed). One row per well, 192 rows.
-The training scripts no longer read it — they build sequences from
-`preprocessing/splits.csv` — but it is kept as the dataset's sequence index:
+Everything lives in **`lstm_sequence_model.ipynb`**: it encodes each well's
+frames once with a frozen ResNet18, builds variable-length sequences, trains the
+LSTM head under grouped 5-fold CV, and runs the ablations.
 
-| Well | pH | Day 1 | Day 2 | ... | Day 11 |
-|---|---|---|---|---|---|
-| 1 | 5 | `cropped_0hr_pH5_W1.JPG` | `cropped_24hr_pH5_W1.JPG` | ... | `cropped_264hr_pH5_W1.JPG` |
-
-The `Day N` columns are labels only — the real elapsed times are unevenly spaced:
-
-```
-Day 1..11  ->  0, 24, 30, 48, 72, 95, 120, 168, 192, 216, 264 hr
-```
-
-The removed Keras notebook carried this as its `day_to_hour` dict.
-
-**Split.** The removed notebook wrote its own per-pH split (10 test / 33 train /
-5 val per class) to three CSVs. Those are gone; the scripts now use
-`preprocessing/splits.csv` like every other arm, so all five folders share one
-split. Either way, a row here *is* a well, so this arm is inherently well-wise —
-the leakage discussed in `supervised/README.md` cannot occur.
-
-## Scripts
-
-| Script | Purpose |
-|---|---|
-| `train_lstm.py` | Encodes each well's frames once with a frozen ResNet18, trains the LSTM head, runs the ablations |
-| `cv_lstm.py` | The same model under grouped 5-fold CV over all 192 wells |
-
-Two notebooks were removed: `lstm_model.ipynb` (ported to `train_lstm.py`) and
+Two notebooks were removed: `lstm_model.ipynb` (superseded) and
 `second_LSTM.ipynb` (a Keras CNN-LSTM with three variants — a hybrid averaging
 per-frame and sequence heads, a two-branch model fusing CNN features with HSV
 histograms, and a last-day-only baseline). The Keras work was never reproducible
 here since TensorFlow is not installed; its ablation idea survives as the
-last-timepoint baseline in `train_lstm.py`. Their defects are recorded below.
+last-timepoint baseline in `lstm_sequence_model.ipynb`. Their defects are recorded below.
 
 ### Architecture
 
@@ -80,7 +55,7 @@ than 11M — the only tractable option with 116 training wells.
 ## Audit and fixes
 
 The original `lstm_model.ipynb` (removed) could not run at all as written.
-All of the following are fixed in `train_lstm.py`:
+All of the following are fixed in `lstm_sequence_model.ipynb`:
 
 | # | Defect | Fix |
 |---|---|---|
@@ -108,8 +83,8 @@ failed quietly too.
 > the effective sample size is 192 rather than 1963.
 
 ```bash
-python3 lstm/train_lstm.py     # single split
-python3 lstm/cv_lstm.py        # grouped 5-fold CV
+# open in Jupyter and Run All, or execute headlessly:
+jupyter nbconvert --to notebook --execute --inplace lstm/lstm_sequence_model.ipynb
 ```
 
 | Model (per well) | grouped 5-fold CV | acid vs alkaline |
@@ -204,7 +179,7 @@ image, and therefore not comparable with the other arms.
 
 ## Original notebook issues (superseded)
 
-Kept for the record; all are addressed by `train_lstm.py` above.
+Kept for the record; all are addressed by `lstm_sequence_model.ipynb` above.
 
 - `lstm_model.ipynb` iterated `os.listdir('Split_Data1/train')` but joins
   against `'Final_Data'` — neither exists. The `len(seq)==11` guard turned that
@@ -222,8 +197,7 @@ Kept for the record; all are addressed by `train_lstm.py` above.
 
 ## Running
 
-`train_lstm.py` runs from the **repository root**. The notebooks' paths are also
-root-relative — start Jupyter there or `os.chdir("..")` in the first cell; note
-`hydrogel_dataset.csv` now lives in this folder. Image directories are
-`.gitignore`d and must exist locally. Embeddings are cached to
-`lstm/_embeddings.npz` after the first run.
+Paths inside the notebook are relative to the **repository root**, so start
+Jupyter there (or `os.chdir("..")` in the first cell). `Preprocessed_Data/` and
+`preprocessing/splits.csv` must be present. Frame embeddings are cached to
+`lstm/_embeddings.npz` on the first run, which makes later runs fast.

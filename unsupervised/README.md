@@ -12,15 +12,15 @@ elsewhere in the project.
 
 ```
 raw images
-  -> preprocessing/crop_wells.py      (well detection, circular crop)
-  -> preprocessing/build_split.py  (well-wise manifest)
+  -> preprocessing/preprocessing.ipynb      (well detection, circular crop)
+  -> preprocessing/preprocessing.ipynb  (well-wise manifest)
   -> THIS FOLDER                   (PCA / k-means / GMM / DBSCAN, labels held out)
 ```
 
 ## Method
 
-`analyze.py` reuses the 512-dim joint HSV histograms cached by
-`supervised/train_supervised.py`. Labels are **never** given to any clustering
+`unsupervised_analysis.ipynb` reuses the 512-dim joint HSV histograms cached by
+`supervised/supervised_models.ipynb`. Labels are **never** given to any clustering
 algorithm — they are used only afterwards, to score what the clusters found.
 
 241 of the 512 histogram bins are identically zero, so a variance filter reduces
@@ -32,8 +32,8 @@ information (NMI) against three candidate groupings — pH, degradation timepoin
 and physical well. Whichever the clusters track is the answer.
 
 ```bash
-python3 supervised/train_supervised.py   # first, to cache features
-python3 unsupervised/analyze.py          # ~1 min; writes unsupervised/results.json
+# open in Jupyter and Run All, or execute headlessly:
+jupyter nbconvert --to notebook --execute --inplace unsupervised/unsupervised_analysis.ipynb
 ```
 
 ## Results
@@ -153,5 +153,5 @@ this stage at all), so the resemblance is a coincidence, not a link.
 ## Running
 
 Paths are relative to the **repository root**. Requires
-`supervised/_features.npz` (produced by `supervised/train_supervised.py`) and
+`supervised/_features.npz` (produced by `supervised/supervised_models.ipynb`) and
 `preprocessing/splits.csv`.

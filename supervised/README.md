@@ -14,14 +14,14 @@ Pipeline position:
 
 ```
 raw images
-  -> preprocessing/crop_wells.py          (well detection, circular crop)
-  -> preprocessing/build_split.py     (well-wise split manifest)
+  -> preprocessing/preprocessing.ipynb          (well detection, circular crop)
+  -> preprocessing/preprocessing.ipynb     (well-wise split manifest)
   -> THIS FOLDER                       (rule-based -> SVM / RF / MLP)
 ```
 
 ## Notebooks
 
-### `rule_based.py` — rule-based classifiers (no training)
+### `supervised_models.ipynb` — rule-based classifiers (no training)
 
 Two hand-written classifiers, included as the floor that any learned model must
 beat.
@@ -44,7 +44,7 @@ alkaline, lighter green as more acidic.
 the colour descriptors and thresholds a single value, the mean
 green channel: `< 60 -> pH 5`, `< 75 -> 6`, `< 90 -> 7`, else `8`.
 
-Both are now scored on the corrected data (`python3 supervised/rule_based.py`),
+Both are now scored on the corrected data (`supervised/supervised_models.ipynb`),
 and **both fail**:
 
 | Rule | 4-way accuracy | acid vs alkaline |
@@ -62,7 +62,7 @@ This is a useful floor: hand-written colour rules carry essentially no pH
 signal here, so the learned models' 0.755 is not a marginal gain over
 common sense.
 
-### `train_supervised.py` — trained classifiers
+### `supervised_models.ipynb` — trained classifiers
 
 **Features.** A different, larger descriptor than the one above — a *joint* 3D
 HSV histogram rather than three separate 1D ones:
@@ -95,7 +95,7 @@ hours lets it condition on where in the degradation curve the sample sits.
 ## Audit and fixes
 
 The original `knn_svm_rf.ipynb` (removed) had five defects, all fixed in
-`train_supervised.py`:
+`supervised_models.ipynb`:
 
 | # | Defect | Fix |
 |---|---|---|
@@ -240,9 +240,8 @@ convolution of the backbone; the deeper layers actively hurt.
 ## Running
 
 ```bash
-python3 preprocessing/build_split.py
-python3 supervised/train_supervised.py    # single split, ~30 s
-python3 final_eval.py                     # grouped 5-fold CV, all arms
+# open in Jupyter and Run All, or execute headlessly:
+jupyter nbconvert --to notebook --execute --inplace supervised/supervised_models.ipynb
 ```
 
 Paths are relative to the **repository root**. `Preprocessed_Data/` is

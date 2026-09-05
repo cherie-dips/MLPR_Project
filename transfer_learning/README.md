@@ -8,7 +8,7 @@ Pipeline position:
 
 ```
 raw images
-  -> preprocessing/crop_wells.py          (well detection, circular crop)
+  -> preprocessing/preprocessing.ipynb          (well detection, circular crop)
   -> preprocessing/feature_extraction  (well-wise 60/20/20 split)
   -> THIS FOLDER                       (ResNet18 / VGG16 -> classifier head)
 ```
@@ -18,33 +18,34 @@ convolutional network from scratch. A frozen or lightly fine-tuned ImageNet
 backbone gives well-conditioned generic filters (edges, texture, colour blobs)
 and leaves only a small head to fit.
 
-## Scripts
+## Notebook
 
-| Script | Purpose |
-|---|---|
-| `train_transfer.py` | Fine-tunes ResNet18 on the well-wise split, then fits a Random Forest on its embeddings |
-| `layer_probe.py` | Accuracy of each ResNet18 stage — the core diagnosis |
-| `diagnose.py` | Feature ablation and linear probes |
-| `improve.py` | Grouped CV across feature sets |
-| `best_pipeline.py` | **The final model** — stem (avg+std) + histogram → RF |
-| `stem_variants.py` | How to pool the stem: avg vs avg+std vs spatial |
+Everything in this folder lives in **`resnet_rf.ipynb`**, in order:
 
-Three notebooks were removed: `transfer_learning.ipynb` (the main experiment),
-`model_analysis.ipynb` (a cell-by-cell duplicate of its ResNet18 section) and
+1. **Diagnosis** — accuracy of each ResNet18 stage (the core finding)
+2. **Parameter count** — how little of the backbone is actually used
+3. **Pooling study** — avg vs avg+std vs spatial pooling of the stem
+4. **The final model** — stem (avg+std) + HSV histogram → Random Forest
+5. **Evaluation** — grouped 5-fold CV, confusion matrices, per-class report
+6. **Fit on all data** → `resnet_rf_model.pkl`
+
+Four notebooks were removed as superseded: `transfer_learning.ipynb` (fine-tuned
+ResNet18, 0.662), `model_analysis.ipynb` (a duplicate of its ResNet18 section),
 `random_forest_cnn.ipynb` (VGG16 + RF, never reproducible here — TensorFlow is
-not installed). Their defects are recorded below.
+not installed) and the diagnostic scripts, whose results are now cells in
+`resnet_rf.ipynb`. Their defects are recorded below.
 
 ## Audit and fixes
 
 The original `transfer_learning.ipynb` (removed) had four defects, all fixed
-in `train_transfer.py`:
+in `resnet_rf.ipynb`:
 
 | # | Defect | Fix |
 |---|---|---|
 | 1 | `ImageFolder` over `Split_Data/`, which is **leaky** — all 192 physical wells appear in train, 170/175 also in val/test | Reads `preprocessing/splits.csv` (well-wise, disjoint) |
 | 2 | Trained a fixed 15 epochs and **never used val to pick a checkpoint** — the reported model was simply the last one | Val accuracy selects the checkpoint; early stopping (patience 8) |
 | 3 | `lr=1e-3` on all 11M pretrained weights, no augmentation, no weight decay | Discriminative LRs (backbone 1e-4, head 1e-3), AdamW `wd=1e-4`, cosine decay, mild geometric augmentation, label smoothing 0.05 |
-| 4 | No train/val curves recorded, so over/underfit was never diagnosed | Per-epoch curves saved to `results.json` |
+| 4 | No train/val curves recorded, so over/underfit was never diagnosed | Train/val curves plotted in the notebook |
 
 Augmentation is deliberately **geometric only** (flips, ±20° rotation) plus a
 mild brightness/contrast jitter of 0.10. Hue and saturation are left alone —
@@ -59,8 +60,8 @@ colour-invariant layer.
 ## Results
 
 ```bash
-python3 preprocessing/build_split.py
-python3 transfer_learning/train_transfer.py   # ~16 min on Apple M4 (MPS)
+# open in Jupyter and Run All, or execute headlessly:
+jupyter nbconvert --to notebook --execute --inplace transfer_learning/resnet_rf.ipynb
 ```
 
 Well-wise split, 1,177 train / 410 val / 376 test images. Per-**image** accuracy.
@@ -169,8 +170,8 @@ Grouped 5-fold CV, **per image**: accuracy **0.808 ± 0.021**, macro-F1 **0.806*
 acid-vs-alkaline **0.955 ± 0.010**. This is the best model in the project.
 
 ```bash
-python3 transfer_learning/best_pipeline.py                  # evaluate
-python3 transfer_learning/best_pipeline.py --save model.pkl # fit on all data
+# open in Jupyter and Run All, or execute headlessly:
+jupyter nbconvert --to notebook --execute --inplace transfer_learning/resnet_rf.ipynb
 ```
 
 ## Why this arm underperforms — diagnosed
@@ -181,7 +182,7 @@ them from the worst possible place in the network.
 
 ### Evidence 1 — accuracy falls monotonically with depth
 
-`layer_probe.py` takes globally-average-pooled features from each ResNet18 stage
+`resnet_rf.ipynb` takes globally-average-pooled features from each ResNet18 stage
 (frozen, ImageNet weights, no fine-tuning) and fits the same RF to each.
 Grouped 5-fold CV over all 192 wells:
 
@@ -311,15 +312,6 @@ far better answered than the 4-way figure suggests.
   temperature or isotonic scaling on the val wells would make the confidence
   scores usable, which matters more than accuracy for a clinical readout.
 
-## Reproducing the diagnosis
-
-```bash
-python3 transfer_learning/diagnose.py       # feature ablation + linear probes
-python3 transfer_learning/layer_probe.py    # accuracy by ResNet stage
-python3 transfer_learning/improve.py        # grouped CV over feature sets
-python3 transfer_learning/best_pipeline.py  # corrected pipeline
-```
-
 ## Caveats
 
 - Images within a well are strongly correlated, so even under grouped CV the
@@ -332,6 +324,8 @@ python3 transfer_learning/best_pipeline.py  # corrected pipeline
 
 ## Running
 
-Paths are relative to the **repository root**. `Preprocessed_Data/` is
-`.gitignore`d and must exist locally. The script writes
-`transfer_learning/resnet18_ph_wellwise.pth` (ignored) and `results.json`.
+Paths inside the notebook are relative to the **repository root**, so start
+Jupyter there (or `os.chdir("..")` in the first cell). `Preprocessed_Data/` and
+`preprocessing/splits.csv` must be present. Stage features are cached to
+`transfer_learning/_*.npz` on the first run; the fitted model is written to
+`transfer_learning/resnet_rf_model.pkl`. All are `.gitignore`d.
