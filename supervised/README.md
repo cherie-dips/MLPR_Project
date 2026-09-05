@@ -143,7 +143,12 @@ cropped well image
 
 This is the strongest model built from colour features alone. The best model
 overall is in `transfer_learning/` — the same histogram concatenated with an
-avg+std pooled ResNet18 stem, reaching **0.808**.
+avg+std pooled ResNet18 stem, reaching **0.798**.
+
+Note the forest sizes differ between the two arms: this one uses the 400 trees
+its grid search selected, while `transfer_learning/` uses 100, chosen to keep the
+deliverable model small. The difference is worth about one point of accuracy,
+inside the fold-to-fold spread.
 
 ## Running
 

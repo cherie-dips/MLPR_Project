@@ -1,6 +1,6 @@
 # Transfer Learning — ResNet18 stem + Random Forest
 
-**The best model in the project: 0.808 per-image accuracy.**
+**The best model in the project: 0.798 per-image accuracy.**
 
 **Notebook:** `resnet_rf.ipynb`
 
@@ -23,15 +23,16 @@ each, grouped 5-fold CV:
 
 | Stage | dim | per-image accuracy |
 |---|---|---|
-| **stem** (`conv1`+bn+relu+pool) | 64 | **0.751 ± 0.017** |
-| layer1 | 64 | 0.750 ± 0.028 |
-| layer2 | 128 | 0.713 ± 0.028 |
-| layer3 | 256 | 0.695 ± 0.018 |
-| layer4 | 512 | 0.629 ± 0.021 |
+| **stem** (`conv1`+bn+relu+pool) | 64 | **0.749 ± 0.014** |
+| layer1 | 64 | **0.752 ± 0.019** |
+| layer2 | 128 | 0.703 ± 0.030 |
+| layer3 | 256 | 0.678 ± 0.025 |
+| layer4 | 512 | 0.611 ± 0.020 |
 
-Accuracy falls monotonically with depth, and the first convolution's 64 channels
-carry 12.2 points more pH signal than the 512-d final embedding. So this pipeline
-uses the stem and discards everything deeper.
+Accuracy falls with depth. The two shallowest stages are tied within the fold
+spread and both carry roughly 14 points more pH signal than the 512-d final
+embedding, so this pipeline uses the stem — the cheapest of the two — and
+discards everything deeper.
 
 Two supporting measurements in the notebook:
 
@@ -39,8 +40,7 @@ Two supporting measurements in the notebook:
   embedding, which is only possible if that embedding has discarded colour.
 - Concatenating the raw layer4 embedding onto the histogram *reduces* accuracy
   (0.755 → 0.693): a Random Forest samples `sqrt(n_features)` candidates per
-  split, so 512 weak dimensions dilute the informative bins. Compressing the
-  embedding to 32 PCs removes the damage (0.762) but adds nothing.
+  split, so 512 weak dimensions dilute the informative bins.
 
 ## How much of ResNet18 is used
 
@@ -62,13 +62,13 @@ and degradation makes gels patchy, so that heterogeneity is signal.
 
 | Pooling | dim | accuracy |
 |---|---|---|
-| avg | 64 | 0.752 ± 0.017 |
-| **avg + std** | **128** | **0.793 ± 0.017** |
+| avg | 64 | 0.750 ± 0.014 |
+| **avg + std** | **128** | **0.797 ± 0.017** |
 | 2×2 spatial | 256 | 0.769 ± 0.029 |
 | 3×3 spatial | 576 | 0.789 ± 0.034 |
 
-Adding std is worth +4.1 points, and beats richer *spatial* pooling at a quarter
-the dimensionality — the variation matters, its location does not.
+Adding std is worth about +4.7 points, and beats richer *spatial* pooling at a
+quarter the dimensionality — the variation matters, its location does not.
 
 ## Final architecture
 
@@ -78,23 +78,34 @@ cropped well image
   -> ResNet18 STEM (frozen): maxpool(relu(bn1(conv1(x))))     -> (64, 56, 56)
   -> concat [ spatial mean (64) , spatial std (64) ]          -> 128-d
   -> concat 8x8x8 HSV histogram, L2-normalised (512)          -> 640-d
-  -> RandomForest(400 trees, min_samples_leaf=2)
+  -> RandomForest(100 trees, min_samples_leaf=2)
   -> pH in {5, 6, 7, 8}
 ```
+
+**Why 100 trees.** Accuracy saturates well before this: 400 trees scores 0.808
+and 800 scores 0.809, differences inside the ±0.02 fold spread, while 100 keeps
+the fitted model roughly 4× smaller (4.6 MB vs 18.3 MB) and 3.5× faster to fit.
+`n_estimators` averages variance *across* trees rather than constraining any one
+of them, so it trades model size against a small amount of accuracy, not against
+fit — training accuracy is ~1.0 at every setting from 25 trees upward.
 
 Building it up, per image, grouped 5-fold CV:
 
 | Features | dim | accuracy | acid/alk |
 |---|---|---|---|
-| ResNet18 layer4 embedding | 512 | 0.629 ± 0.021 | 0.840 |
-| colour moments | 12 | 0.697 ± 0.023 | 0.901 |
-| stem, avg pool | 64 | 0.752 ± 0.017 | 0.931 |
-| HSV histogram | 512 | 0.755 ± 0.017 | 0.931 |
-| stem, avg+std pool | 128 | 0.793 ± 0.017 | — |
-| **stem (avg+std) + histogram** | **640** | **0.808 ± 0.021** | **0.955** |
+| ResNet18 layer4 embedding | 512 | 0.611 ± 0.020 | — |
+| stem, avg pool | 64 | 0.750 ± 0.014 | — |
+| HSV histogram | 512 | 0.745 ± 0.007 | — |
+| stem, avg+std pool | 128 | 0.797 ± 0.017 | — |
+| **stem (avg+std) + histogram** | **640** | **0.798 ± 0.016** | **0.952** |
 
-Macro-F1 **0.806**. Feature importance splits across all three blocks — stem
-mean, stem std and histogram each contribute, none dominates.
+Macro-F1 **0.796**. Feature importance splits across all three blocks — stem
+mean 0.28, stem std 0.35, histogram 0.37 — none dominates.
+
+The last two rows sit within one fold's noise of each other on a single CV seed.
+Averaged over three seeds the ordering is consistent (0.796 vs 0.800), so the
+histogram earns its place, but only just: the 128-d stem alone is a viable
+simplification if feature count matters more than half a point.
 
 ### Train / validation / test
 
@@ -104,12 +115,16 @@ the fixed 116-well train split and scoring all three shows the fit:
 | split | wells | images | accuracy | macro-F1 | acid/alk |
 |---|---|---|---|---|---|
 | train | 116 | 1,177 | 0.999 | 0.999 | 1.000 |
-| validation | 40 | 410 | 0.756 | 0.755 | 0.944 |
-| test | 36 | 376 | 0.779 | 0.779 | 0.960 |
+| validation | 40 | 410 | 0.751 | 0.751 | 0.944 |
+| test | 36 | 376 | 0.785 | 0.785 | 0.968 |
 
-Train → validation gap: **+0.243**. The Random Forest fits the training wells
-almost completely; validation and test agree within the noise of a 36–40 well
-split.
+Train → validation gap: **+0.248**. An unpruned Random Forest grows every tree
+to purity, so it interpolates the training set by construction — training
+accuracy is ~1.0 at every forest size and at every `max_depth` above 6. The gap
+is a property of the estimator rather than a symptom: constraining the forest
+(`min_samples_leaf` 8/16/32, `max_depth` 4/6) narrows it to +0.10 but costs up
+to 11 points of held-out accuracy. The reported figure is measured on held-out
+wells, so the training fit does not inflate it.
 
 ### Where the errors are
 
@@ -118,13 +133,13 @@ held-out predictions:
 
 |  | pH5 | pH6 | pH7 | pH8 |
 |---|---|---|---|---|
-| **pH5** | **442** | 36 | 10 | 4 |
-| **pH6** | 61 | **400** | 21 | 21 |
-| **pH7** | 2 | 17 | **357** | 95 |
-| **pH8** | 1 | 12 | 97 | **387** |
+| **pH5** | **435** | 42 | 9 | 6 |
+| **pH6** | 61 | **396** | 24 | 22 |
+| **pH7** | 4 | 16 | **346** | 105 |
+| **pH8** | 1 | 12 | 95 | **389** |
 
-Of 1,963 images, 377 are wrong but only **88 (4.5%) cross the acid/alkaline
-boundary**; the rest are adjacent-pH slips, dominated by pH7↔pH8. Since healthy
+Of 1,963 images, 397 are wrong but only **94 (4.8%) cross the acid/alkaline
+boundary**; the rest are adjacent-pH slips, dominated by pH7↔pH8 (200 of 397). Since healthy
 skin is pH 4–6 and chronic wounds pH 7–8, the clinically important call is far
 better answered than the 4-way figure suggests.
 
