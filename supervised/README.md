@@ -71,6 +71,14 @@ against a strong heuristic.
 
 ## Results
 
+![supervised results](../figures/supervised.png)
+
+**Left** — every classifier on the HSV histogram, 4-way accuracy and the
+acid-vs-alkaline collapse, under grouped 5-fold CV. **Right** — the Random Forest
+confusion matrix pooled across folds, showing errors concentrated on adjacent pH
+pairs.
+
+
 Grouped 5-fold CV over all 192 wells, per image:
 
 | Model | accuracy | acid/alk | macro-F1 |

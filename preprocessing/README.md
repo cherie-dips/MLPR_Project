@@ -147,6 +147,24 @@ out.
 | `Preprocessed_Data/` | all model folders |
 | `preprocessing/splits.csv` | all model folders |
 
+## Results
+
+![preprocessing results](../figures/preprocessing.png)
+
+**Left** — images per (timepoint, pH) cell against the full grid of 48. After the
+saturation fallback, 34 of 44 cells are complete and none falls below 45.
+**Right** — the split, grouped by physical well.
+
+| | value |
+|---|---|
+| Raw images | 2,112 |
+| Cropped | **2,091 (99.0%)** |
+| Physical wells | 192 |
+| Complete 11-frame wells | 174 / 192 |
+| Split (wells) | 116 train / 40 val / 36 test |
+| Split (images) | 1,264 / 435 / 392 |
+| Wells shared between splits | **0** |
+
 ## Running
 
 ```bash

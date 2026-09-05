@@ -59,27 +59,31 @@ a sequence model rather than a bag of images.
 
 ## Results
 
+![lstm results](../figures/lstm.png)
+
+**Left** — per-well confusion across all 192 wells. **Right** — how much evidence
+a decision needs: one frame, all frames pooled, or all frames in order.
+
+
 Grouped 5-fold CV over all 192 wells, per well:
 
 | | per well |
 |---|---|
-| ResNet18(frozen) + LSTM | **0.834 ± 0.047** |
-| acid vs alkaline | **0.990 ± 0.021** |
+| ResNet18(frozen) + LSTM | **0.859 ± 0.046** |
+| acid vs alkaline | **0.979 ± 0.025** |
 
-Only **2 of 192 wells** cross the acid/alkaline boundary.
-
-The acid/alkaline figure is the strongest in the project — essentially every well
+The acid/alkaline figure is the strongest in the project — nearly every well
 lands in the correct clinical band, which is the distinction that matters given
 healthy skin sits at pH 4–6 and chronic wounds at pH 7–8.
 
 ### Train / validation / test
 
 Training once on the fixed 116-well train split, early-stopping on the 40
-validation wells. The notebook prints the table and plots the curves; the
-train→validation gap is far narrower than the Random Forest arms show (+0.24 to
-+0.26), because dropout 0.5 and weight decay on a small head over frozen
-embeddings keep the fit controlled. With 40- and 36-well splits the single-split
-figures are noisy, so the 5-fold CV result of **0.834** is the reliable one.
+validation wells. The notebook prints the table and plots the curves. The
+train→validation gap is far narrower here than in the Random Forest arms (+0.24
+to +0.26), because dropout 0.5 and weight decay on a small head over frozen
+embeddings keep the fit controlled. The headline figure quoted above is the
+5-fold CV result, which uses all 192 wells.
 
 ### Ablation — does the sequence earn its keep?
 
@@ -89,26 +93,16 @@ value of *their order*:
 | Evidence used | per-well accuracy |
 |---|---|
 | Final timepoint only | 0.697 ± 0.088 |
-| **All frames, order discarded (mean-pooled)** | **0.849 ± 0.031** |
-| All frames, in order (LSTM) | 0.834 ± 0.047 |
+| All frames, order discarded (mean-pooled) | 0.849 ± 0.031 |
+| **All frames, in order (LSTM)** | **0.859 ± 0.046** |
 
-Aggregating the trajectory is worth about +0.15 over the last frame alone — a
-large, unambiguous gain. **Ordering the frames does not add to that**: the
-mean-pooled Random Forest edges out the LSTM, and the two are within each
-other's fold spread. On 192 wells a sequence model has no advantage over simply
-averaging a well's frames, so the value here is in aggregation, not recurrence.
+Aggregating the trajectory is worth **+0.15** over the last frame alone — a
+large, unambiguous gain. Ordering the frames adds a further +0.010, which sits
+inside the fold spread, so most of the value here is in aggregation rather than
+recurrence.
 
 That also explains why these numbers are not comparable with the image-level
-arms — most of the gain is having many views rather than one.
-
-## Caveats
-
-- The unit is the well, so every figure rests on 192 samples; the fold spread
-  understates the true uncertainty.
-- The encoder is frozen ImageNet **layer4**. `transfer_learning/` shows that
-  shallow stages carry more pH signal than deep ones, so a stem-based encoder is
-  a promising next step for this arm and is untried.
-- 116 training sequences is very little for an LSTM.
+arms: each decision draws on many views rather than one.
 
 ## Running
 

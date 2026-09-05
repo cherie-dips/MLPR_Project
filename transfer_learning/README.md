@@ -69,6 +69,14 @@ and degradation makes gels patchy, so that heterogeneity is signal.
 Adding std is worth about +3.6 points, and beats richer *spatial* pooling at a
 quarter the dimensionality — the variation matters, its location does not.
 
+## Results
+
+![transfer learning results](../figures/transfer_learning.png)
+
+**Left** — pH accuracy by ResNet18 stage, falling monotonically with depth.
+**Centre** — each feature set built up to the final model. **Right** — the final
+model's confusion matrix pooled across folds.
+
 ## Final architecture
 
 ```
@@ -134,24 +142,6 @@ boundary**; the rest are adjacent-pH slips, dominated by pH7↔pH8. The notebook
 plots the full 4×4 matrix and its collapse to the binary question. Since healthy
 skin is pH 4–6 and chronic wounds pH 7–8, the clinically important call is far
 better answered than the 4-way figure suggests.
-
-## Ideas not yet tried
-
-- **A small CNN trained from scratch on HSV input.** The measurements above
-  suggest ImageNet initialisation is not an advantage here; a 3–4 layer CNN has
-  the right bias and few enough parameters for 116 training wells.
-- **Fine-tuning only the stem** plus a head, rather than a frozen backbone.
-- **Ordinal regression.** pH is ordered and nearly every error is off-by-one; an
-  ordinal loss encodes that, whereas cross-entropy treats 5-vs-8 and 7-vs-8 as
-  equally wrong.
-- **Probability calibration.** Raw Random Forest votes are poorly calibrated;
-  temperature or isotonic scaling on the validation wells would make the
-  confidence scores usable, which matters for a clinical readout.
-- **More wells.** A learning curve over subsampled wells still climbs steeply at
-  the full 192 and fits `acc = 0.942 - 1.390·n^(-0.453)`; reaching 0.82 needs
-  roughly 214 training wells (1.4× current). Well count, not model capacity, is
-  the binding constraint — regularising the forest narrows the train/validation
-  gap but costs up to 11 points of held-out accuracy.
 
 ## Running
 

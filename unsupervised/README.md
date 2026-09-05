@@ -31,6 +31,14 @@ the answer.
 
 ## Results
 
+![unsupervised results](../figures/unsupervised.png)
+
+**Left and centre** — the same PCA projection coloured by pH and by timepoint.
+The timepoint panel shows clear banding; the pH panel does not. **Right** —
+adjusted Rand index between k-means clusters and each candidate grouping:
+degradation time scores 4.3× higher than pH.
+
+
 ### PCA — colour variance is high-dimensional
 
 | | |
@@ -117,15 +125,6 @@ cross the boundary.
    the cluster structure and the clinical question — healthy skin pH 4–6, chronic
    wound pH 7–8 — far better than 4-way classification, and every arm scores
    0.93–0.99 on it.
-
-## Caveats
-
-- All of the above uses hand-crafted HSV histograms. Clustering the ResNet stem
-  features from `transfer_learning/` may find different structure and is untried.
-- ARI against "time in 4 bins" is the matched comparison for k=4 clustering; the
-  all-11-timepoints ARI is lower simply because 4 clusters cannot express 11
-  groups, so NMI (0.347) is the better read there.
-- Silhouette is computed in the 94-D PCA space, not the raw 169-D space.
 
 ## Running
 
