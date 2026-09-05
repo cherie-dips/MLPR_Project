@@ -21,6 +21,8 @@ The notebook measures this stage by stage. Global-average-pooled features from
 each ResNet18 stage, frozen ImageNet weights, the same Random Forest fitted to
 each, grouped 5-fold CV:
 
+![accuracy by ResNet18 stage](../figures/resnet_stages.png)
+
 | Stage | dim | per-image accuracy |
 |---|---|---|
 | **stem** (`conv1`+bn+relu+pool) | 64 | **0.752 ± 0.021** |
@@ -73,9 +75,9 @@ quarter the dimensionality — the variation matters, its location does not.
 
 ![transfer learning results](../figures/transfer_learning.png)
 
-**Left** — pH accuracy by ResNet18 stage, falling monotonically with depth.
-**Centre** — each feature set built up to the final model. **Right** — the final
-model's confusion matrix pooled across folds.
+**Left** — each feature set built up to the final model. **Right** — the final
+model's confusion matrix, pooled across the 5 folds and therefore covering every
+one of the 2,091 images as a held-out prediction.
 
 ## Final architecture
 
