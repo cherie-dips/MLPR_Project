@@ -26,7 +26,7 @@ and leaves only a small head to fit.
 | `layer_probe.py` | Accuracy of each ResNet18 stage — the core diagnosis |
 | `diagnose.py` | Feature ablation and linear probes |
 | `improve.py` | Grouped CV across feature sets |
-| `best_pipeline.py` | The corrected pipeline, with per-well aggregation |
+| `best_pipeline.py` | The corrected pipeline (stem + histogram) |
 
 Three notebooks were removed: `transfer_learning.ipynb` (the main experiment),
 `model_analysis.ipynb` (a cell-by-cell duplicate of its ResNet18 section) and
@@ -142,8 +142,9 @@ Test accuracy **0.662**, macro-F1 **0.660**, macro AUC **0.879** — 95% CI on
 accuracy [0.613, 0.708].
 
 **This arm is beaten by the hand-crafted-feature baseline.** `supervised/`
-Random Forest + elapsed time reaches **0.769** on the same split and test set,
-about 11 points better, at a tiny fraction of the compute.
+Random Forest on the HSV histogram reaches **0.755** under grouped CV against
+this arm's **0.629** for the layer4 embedding — about 13 points better, at a
+tiny fraction of the compute.
 
 The next section diagnoses why, and the cause is *not* mainly the small dataset:
 it is that `fc = nn.Identity()` extracts the most colour-invariant layer of a
@@ -152,19 +153,17 @@ network pretrained to ignore colour, on a task where colour is the label.
 ### Recommended pipeline instead
 
 ```
-one well = up to 11 cropped images, ordered by elapsed hours
-  for each image:
+one cropped well image
     -> resize 224x224, ImageNet normalise
     -> ResNet18 STEM only: maxpool(relu(bn1(conv1(x))))   # NOT layer4
     -> global average pool                                -> 64-d
     -> concat 8x8x8 HSV histogram (512-d)                 -> 576-d
-    -> RandomForest(400 trees, min_samples_leaf=2)        -> class probabilities
-  average the probabilities over the well -> argmax
+    -> RandomForest(400 trees, min_samples_leaf=2)        -> pH
 ```
 
-Grouped 5-fold CV over all 192 wells: **0.775 per image, 0.917 per well,
-0.948 acid-vs-alkaline**. (Elapsed time would add ~+0.013 but is deliberately
-excluded — see `supervised/README.md` for why.)
+Grouped 5-fold CV: **0.775 accuracy, 0.948 acid-vs-alkaline**, per image.
+(Elapsed time would add ~+0.013 but is deliberately excluded — see
+`supervised/README.md` for why.)
 
 ## Why this arm underperforms — diagnosed
 
@@ -224,59 +223,59 @@ does help — but it cannot rebuild colour sensitivity from 116 wells.
 
 ### Evidence 4 — fusing raw embeddings makes things *worse*
 
-| Feature set | per-image accuracy |
+| Feature set | accuracy |
 |---|---|
-| HSV histogram + time | **0.785** |
-| Embedding + histogram + time (raw concat) | 0.709 |
-| Histogram + PCA-32(embedding) + time | 0.784 |
+| HSV histogram (512) | **0.755 ± 0.017** |
+| layer4 embedding + histogram (raw concat) | 0.693 ± 0.025 |
+| histogram + PCA-32(embedding) | 0.762 ± 0.024 |
 
 Concatenating 512 weak embedding dimensions onto 512 informative histogram bins
-costs 7.6 points. A Random Forest samples `sqrt(n_features)` candidates per
+costs 6.2 points. A Random Forest samples `sqrt(n_features)` candidates per
 split, so doubling the width with noise halves the chance of picking a useful
 bin. Compressing the embedding to 32 PCs removes the damage — but adds nothing
 either.
 
 ## What actually improves accuracy
 
-All figures below are grouped 5-fold CV over all **192 wells** (every well tested
-exactly once), which is far tighter than the single 36-well test set the earlier
-table used.
+All figures below are **per image**, under grouped 5-fold CV — every well tested
+exactly once, far tighter than the single 36-well test set the earlier table
+used. Per-well aggregation is not reported: it answers an easier question and
+shrinks the effective sample from 1963 to 192.
 
-| Pipeline | per-image | **per-well** | acid vs alkaline |
-|---|---|---|---|
-| layer4 embedding — *notebook's choice* | 0.629 | 0.786 | 0.840 |
-| stem features (64) | 0.751 | 0.891 | 0.931 |
-| stem + time | 0.775 | 0.896 | 0.955 |
-| HSV histogram + time | 0.785 | **0.938** | 0.956 |
-| **stem + histogram + time** | **0.788** | 0.922 | **0.957** |
+| Pipeline | accuracy | acid vs alkaline |
+|---|---|---|
+| layer4 embedding — *notebook's choice* | 0.629 ± 0.021 | 0.840 |
+| colour moments (12) | 0.697 ± 0.023 | 0.901 |
+| stem features (64) | 0.751 ± 0.017 | 0.931 |
+| HSV histogram (512) | 0.755 ± 0.017 | 0.931 |
+| **stem + histogram (576)** | **0.775 ± 0.017** | **0.948** |
 
-Four changes, in descending order of value:
+Three changes, in descending order of value:
 
-**1. Aggregate predictions per well — worth ~+15 points.** Averaging the
-predicted probabilities across a well's 11 timepoints lifts 0.788 → 0.922. This
-is the single largest gain available and it costs nothing: the deployment
-scenario already has a time series per dressing, so there is no reason to force
-a decision from one photograph.
-
-**2. Take features from the stem, not layer4 — worth +12.2 points.** One line:
+**1. Take features from the stem, not layer4 — worth +12.2 points.** One line:
 use `net.maxpool(net.relu(net.bn1(net.conv1(x))))` instead of
 `net.fc = nn.Identity()`. If a pretrained backbone is to be kept at all, this is
 where its useful features are.
 
-**4. Reframe as acid vs alkaline — 0.957, and per-well it is perfect.** The
-per-well confusion for stem+histogram+time over all 192 wells:
+**2. Add the colour histogram alongside the stem — worth +2.4 points**
+(0.751 → 0.775). The two are complementary: the stem's 64 channels are learned
+edge/colour filters, the histogram is an explicit high-resolution colour
+distribution.
+
+**3. Reframe as acid vs alkaline — 0.948.** Confusion for stem + histogram,
+per image, pooled over the 5 folds:
 
 |  | pH5 | pH6 | pH7 | pH8 |
 |---|---|---|---|---|
-| **pH5** | **48** | 0 | 0 | 0 |
-| **pH6** | 5 | **43** | 0 | 0 |
-| **pH7** | 0 | 0 | **42** | 6 |
-| **pH8** | 0 | 0 | 4 | **44** |
+| **pH5** | **429** | 49 | 12 | 2 |
+| **pH6** | 56 | **399** | 29 | 19 |
+| **pH7** | 7 | 18 | **320** | 126 |
+| **pH8** | 2 | 14 | 108 | **373** |
 
-177/192 wells correct (0.922), and **not one well crosses the acid/alkaline
-boundary** — 192/192. Since healthy skin is pH 4–6 and chronic wounds pH 7–8,
-the clinical question this project exists to answer is already solved; all
-residual error is the exact value within a band.
+Of 1,963 images, 442 are wrong but only **103 (5.2%) cross the acid/alkaline
+boundary** — the rest are adjacent-pH slips, dominated by pH7↔pH8 (234 of 442).
+Since healthy skin is pH 4–6 and chronic wounds pH 7–8, the clinical question is
+far better answered than the 4-way figure suggests.
 
 ### Ideas not yet tested
 
@@ -291,8 +290,9 @@ residual error is the exact value within a band.
 - **Fix preprocessing.** 7.1% of images never survive the crop, biased to 0 hr
   and 216/264 hr (`preprocessing/README.md`). Likely a larger gain than anything
   above.
-- **Calibrate before averaging.** Per-well aggregation uses raw RF
-  probabilities; temperature scaling on the val wells should improve the vote.
+- **Calibrate the probabilities.** Raw RF votes are poorly calibrated;
+  temperature or isotonic scaling on the val wells would make the confidence
+  scores usable, which matters more than accuracy for a clinical readout.
 
 ## Reproducing the diagnosis
 
@@ -300,14 +300,14 @@ residual error is the exact value within a band.
 python3 transfer_learning/diagnose.py       # feature ablation + linear probes
 python3 transfer_learning/layer_probe.py    # accuracy by ResNet stage
 python3 transfer_learning/improve.py        # grouped CV over feature sets
-python3 transfer_learning/best_pipeline.py  # corrected pipeline + per-well
+python3 transfer_learning/best_pipeline.py  # corrected pipeline
 ```
 
 ## Caveats
 
-- 36 test wells / 376 test images. Because images within a well are strongly
-  correlated, the effective sample size is closer to 36 than 376, so the
-  interval above is optimistic.
+- Images within a well are strongly correlated, so even under grouped CV the
+  effective sample size is nearer the 192 wells than the 1,963 images; treat the
+  ±0.02 fold spread as a lower bound on the true uncertainty.
 - The VGG16 variant was never verified — TensorFlow is absent here.
 - `ImageFolder` label ordering in the old notebooks depended on every timepoint
   folder holding the same class folders in the same order; the manifest removes

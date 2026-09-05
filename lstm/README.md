@@ -94,40 +94,31 @@ The Keras notebook also read `main_dir = 'New MLPR Data'` — the **raw** images
 rather than the crops — and substituted zero images for missing frames, so it
 failed quietly too.
 
-## Results
+## Results — not comparable with the other arms
+
+> **This arm produces no image-level result, by construction.** One sample *is*
+> one well: the model consumes an ordered sequence of that well's frames and
+> emits a single pH. There is no way to score it per photograph, so it is
+> **excluded from the project's headline comparison**, which is image-level
+> throughout (see `supervised/README.md`).
+>
+> The figures below are per well and are recorded for completeness only. They
+> should **not** be set against the per-image numbers elsewhere — predicting a
+> well from 11 photographs is an easier task than predicting one photograph, and
+> the effective sample size is 192 rather than 1963.
 
 ```bash
-python3 preprocessing/build_split.py
-python3 lstm/train_lstm.py     # ~3 min (12 s encoding + 76 epochs on cached embeddings)
+python3 lstm/train_lstm.py     # single split
+python3 lstm/cv_lstm.py        # grouped 5-fold CV
 ```
 
-**These numbers are per WELL, not per image** — 116 train / 40 val / **36 test**
-wells. They are *not* directly comparable with `supervised/` and
-`transfer_learning/`, which classify single images: predicting a well from 11
-photographs is a genuinely easier task than predicting one photograph.
-
-| Model | train | val | **test** | macro-F1 |
-|---|---|---|---|---|
-| Baseline (majority) | 0.250 | – | 0.250 | – |
-| Last timepoint only (RF) | 1.000 | 0.725 | 0.667 | 0.667 |
-| Mean-pooled sequence (RF) | 1.000 | 0.850 | 0.778 | 0.777 |
-| **ResNet18(frozen) + LSTM** | 0.991 | 0.975 | **0.806** | **0.805** |
-
-Early stopping at epoch 76; best val 0.975 at epoch 51.
-
-### Under grouped 5-fold CV (all 192 wells)
-
-The single 36-well test set above carries a ±13 point interval. `cv_lstm.py`
-re-runs the same model with every well tested exactly once:
-
-| | per well | acid vs alkaline |
+| Model (per well) | grouped 5-fold CV | acid vs alkaline |
 |---|---|---|
-| ResNet18(frozen) + LSTM | **0.812 ± 0.027** | **0.995 ± 0.010** |
+| ResNet18(frozen) + LSTM | 0.812 ± 0.027 | 0.995 ± 0.010 |
+| Mean-pooled sequence (RF) | 0.778* | — |
+| Last timepoint only (RF) | 0.667* | — |
 
-The 4-way figure is *lower* than simply averaging Random Forest predictions over
-a well (0.928, see `supervised/`), but the acid/alkaline figure is the highest
-in the project — 0.995 means essentially every well is placed in the correct
-clinical band.
+\* single 36-well split, not CV.
 
 The LSTM uses **no elapsed-time feature**; frames are only *ordered*, which is
 what makes it a sequence model rather than a bag of images.
@@ -144,8 +135,9 @@ positive result in the project:
 | All 11 timepoints, in order (LSTM) | **0.806** |
 
 Aggregating the trajectory is worth **+0.111** over the last frame alone, and
-modelling it *in order* adds a further **+0.028**. Most of the gain comes from
-having 11 views rather than one, but temporal ordering does contribute.
+modelling it *in order* adds a further **+0.028** — but note most of that gain
+is simply *having 11 views instead of one*, which is the reason these numbers
+are not comparable with the image-level results elsewhere.
 
 This is exactly what `unsupervised/` predicts: colour structure tracks
 degradation time about 3.7× more strongly than pH (ARI 0.31 vs 0.08), so how a
@@ -194,26 +186,21 @@ one well = up to 11 cropped images, ordered by elapsed hours
 ```
 
 AdamW `lr=1e-3`, `weight_decay=1e-3`, label smoothing 0.05, batch 16,
-early-stopped on val at epoch 51.
+early-stopped on val.
 
-Test accuracy **0.806**, macro-F1 **0.805**.
+Per-well accuracy **0.812 ± 0.027** under grouped 5-fold CV — per well, not per
+image, and therefore not comparable with the other arms.
 
-## Caveats — read before quoting the 0.806
+## Caveats
 
-- **The test set is 36 wells.** 0.806 is 29/36. The 95% Wilson interval is
-  **[0.650, 0.903]** — a spread of 25 points. It overlaps every other model in
-  the project, so *this arm cannot be claimed to beat `supervised/` (0.769)*
-  on this evidence. It is suggestive, not established.
-- **Not comparable to the per-image arms.** Per-well prediction gets 11 images
-  of evidence per decision. The honest cross-arm comparison would be to
-  majority-vote the `supervised/` per-image predictions within each well, which
-  has not been done.
+- **The unit is the well, not the image.** Every number here rests on 192 wells,
+  not 1,963 images, so the fold spread understates the true uncertainty.
 - **The encoder is frozen ImageNet**, never adapted to hydrogel images, so the
-  512-dim features are generic. Fine-tuning it jointly is untried and, on 116
-  training wells, likely to overfit as badly as `transfer_learning/` did.
-- 116 training sequences is very little for an LSTM. A repeated grouped
-  cross-validation over all 192 wells would give a far more trustworthy estimate
-  than this single 116/40/36 split, and is the clear next step.
+  512-d features are generic — and `transfer_learning/README.md` shows that
+  ImageNet's deepest features are the *worst* available for this task. A shallow
+  encoder would likely serve this arm better too, and is untried.
+- 116 training sequences is very little for an LSTM.
+- The Keras variants were never runnable here (no TensorFlow).
 
 ## Original notebook issues (superseded)
 

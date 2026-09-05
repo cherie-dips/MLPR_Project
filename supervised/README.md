@@ -138,21 +138,29 @@ Two protocols appear below.
 Both group by the **physical well** = the `(pH, well)` pair, so no well ever
 appears in both train and test.
 
-Three accuracies are reported: **per image**; **per well** (class probabilities
-averaged over that well's timepoints, then argmax); and **acid vs alkaline**
-(pH 5–6 vs 7–8), the clinical question.
+All results are **per image**: one photograph in, one pH out. Per-well
+aggregation (averaging a well's 11 predictions) is deliberately not reported —
+it answers an easier question, and with 192 wells the effective sample size
+collapses from 1963 to 192.
+
+Note the distinction: the split is *grouped* by well, but every accuracy is
+scored on individual images. Grouping the split is the leakage fix; aggregating
+predictions would be a different, easier task.
+
+Two figures are given: 4-way pH accuracy, and **acid vs alkaline** (pH 5–6 vs
+7–8) — the clinical question, also scored per image.
 
 ## Results
 
 Grouped 5-fold CV, all 192 wells, no time feature:
 
-| Model | per image | per well | acid/alk | macro-F1 |
-|---|---|---|---|---|
-| Baseline (majority) | 0.214 | 0.213 | 0.473 | 0.088 |
-| MLP (64,64) | 0.675 ± 0.004 | 0.886 ± 0.041 | 0.905 | 0.673 |
-| SVM (RBF, C=10) | 0.707 ± 0.020 | 0.875 ± 0.044 | 0.920 | 0.704 |
-| KNN (k=9, manhattan) | 0.721 ± 0.022 | 0.901 ± 0.044 | 0.929 | 0.719 |
-| **Random Forest** (400, leaf 2) | **0.755 ± 0.017** | **0.928 ± 0.052** | 0.931 | 0.753 |
+| Model | accuracy | acid/alk | macro-F1 |
+|---|---|---|---|
+| Baseline (majority) | 0.214 ± 0.031 | 0.473 | 0.088 |
+| MLP (64,64) | 0.675 ± 0.004 | 0.905 | 0.673 |
+| SVM (RBF, C=10) | 0.707 ± 0.020 | 0.920 | 0.704 |
+| KNN (k=9, manhattan) | 0.721 ± 0.022 | 0.929 | 0.719 |
+| **Random Forest** (400, leaf 2) | **0.755 ± 0.017** | 0.931 | 0.753 |
 
 Single split, for the fit diagnosis:
 
@@ -171,8 +179,7 @@ Single split, for the fit diagnosis:
 > only as an *interaction*, letting the model use a time-specific decision
 > boundary. It is dropped because it assumes deployment follows the lab's
 > degradation schedule, where each well sits at a **fixed** pH — an assumption a
-> real healing wound violates. Per-well aggregation is worth four times more
-> (+0.17) and needs no clock.
+> real healing wound violates.
 
 ### Fit diagnosis
 
@@ -211,11 +218,10 @@ cropped well image
   -> joint 8x8x8 HSV histogram, L2-normalised     (512)
   -> VarianceThreshold(1e-8)                      (169)
   -> RandomForest(400 trees, min_samples_leaf=2)
-  -> average class probabilities over the well's timepoints
   -> pH in {5, 6, 7, 8}
 ```
 
-**0.755 per image, 0.928 per well, 0.931 acid-vs-alkaline.**
+**0.755 accuracy, 0.931 acid-vs-alkaline** (per image, grouped 5-fold CV).
 
 ## Remaining caveats
 
